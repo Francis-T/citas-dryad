@@ -55,7 +55,7 @@ def gather_device_data(name, address):
     print("Reading data...")
     counter = MAX_SAMPLE_COUNT
     try:
-        stop_time = time.time() + 60.0 ## TODO DEBUG
+        stop_time = time.time() + 12.0
         while (counter > 0):
             handle_event.wait(2000)
             counter -= 1

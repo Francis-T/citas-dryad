@@ -7,12 +7,13 @@
 import struct
 import sys
 import time
+from math import pow
 
 from bluetooth.ble import GATTRequester
 from threading import Event
 
 """ Constants """
-UUID_NAME = "00002a00-0000-1000-8000-00805f9b34fb"
+UUID_NAME       = "00002a00-0000-1000-8000-00805f9b34fb"
 UUID_LIGHT      = "39e1FA01-84a8-11e2-afba-0002a5d5c51b"
 UUID_SOIL_EC    = "39e1FA02-84a8-11e2-afba-0002a5d5c51b"
 UUID_SOIL_TEMP  = "39e1FA03-84a8-11e2-afba-0002a5d5c51b"
@@ -52,6 +53,9 @@ FLAG_NOTIF_ENABLE = "\x01\x00"
 FLAG_NOTIF_DISABLE = "\x00\x00"
 
 class CustomRequester(GATTRequester):
+    DEF_MULT = 3.3
+    DEF_DIV  = 2047 # 2047
+
     def __init__(self, notif_event, *args):
         GATTRequester.__init__(self, *args)
         self.hevent = notif_event
@@ -63,23 +67,25 @@ class CustomRequester(GATTRequester):
          device is updated with a new value
     """
     def on_notification(self, handle, data):
-        #print("From handle={} data={}".format(handle, data))
-
         if handle == HDL_LIGHT:
             dtype = "Light"
-            val = self.get_charac_value(data) / 65535.0
+            val = self.conv_light( self.get_charac_value(data) )
         elif handle == HDL_SOIL_EC:
             dtype = "Soil EC"
-            val = (self.get_charac_value(data) * 3.3) / 2047
+            #val = (self.get_charac_value(data) * self.DEF_MULT) / self.DEF_DIV
+            val = self.conv_ec( self.get_charac_value(data) )
         elif handle == HDL_SOIL_TEMP:
             dtype = "Soil Temp"
-            val = (self.get_charac_value(data) * 3.3) / 2047
+            # val = (self.get_charac_value(data) * self.DEF_MULT) / self.DEF_DIV
+            val = self.conv_temp( self.get_charac_value(data) )
         elif handle == HDL_AIR_TEMP:
             dtype = "Air Temp"
-            val = (self.get_charac_value(data) * 3.3) / 2047
+            # val = (self.get_charac_value(data) * self.DEF_MULT) / self.DEF_DIV
+            val = self.conv_temp( self.get_charac_value(data) )
         elif handle == HDL_SOIL_VWC:
             dtype = "Soil VWC"
-            val = (self.get_charac_value(data) * 3.3) / 2047
+            # val = (self.get_charac_value(data) * self.DEF_MULT) / self.DEF_DIV
+            val = self.conv_moisture( self.get_charac_value(data) )
         elif handle == HDL_CAL_SOIL_VWC:
             dtype = "Soil VSW (cal)"
             val = self.decode_float32(data)
@@ -125,15 +131,51 @@ class CustomRequester(GATTRequester):
          Flower Power.
     """
     def get_charac_value(self, data):
-#        print "Decoding data:",
-#        for part in data:
-#            print str(ord(part)) + ",",
-#        print ""
-#        return (ord(data[3]) << 8) + ord(data[4])
-#        return  float(struct.unpack('>H', data[3:])[0])
-        msby = int("{:08b}".format(ord(data[4]))[::-1], 2)
-        lsby = int("{:08b}".format(ord(data[3]))[::-1], 2)
-        return ((msby << 8) + lsby)
+        return  float(struct.unpack('<H', data[3:])[0])
+
+    def conv_temp(self, val):
+        dec_val = 0.00000003044 * pow(val, 3.0)
+        dec_val -= 0.00008038 * pow(val, 2.0)
+        dec_val += 0.1149 * val
+        dec_val -= 30.449999999
+
+        if dec_val < -10.0:
+            dec_val = -10.0
+        elif dec_val > 55.0:
+            dec_val = 55.0
+
+        return dec_val
+
+    def conv_ec(self, val):
+        if val > 1771:
+            return 10.0
+        
+        dec_val = (val / 1771.0) * 10.0
+        return dec_val
+
+    def conv_light(self, val):
+        dec_val = 16655.6019 * pow(val, -1.0606619)
+        return dec_val
+
+    def conv_moisture(self, val):
+        dec_val_tmp = 0.0000000010698 * pow(val, 4.0)
+        dec_val_tmp -= 0.00000152538 * pow(val, 3.0)
+        dec_val_tmp += 0.000866976 * pow(val, 2.0)
+        dec_val_tmp -= 0.169422 * val
+        dec_val_tmp += 11.4293
+
+        dec_val = 0.0000045 * pow(dec_val_tmp, 3.0)
+        dec_val -= 0.00055 * pow(dec_val_tmp, 2.0)
+        dec_val += 0.0292 * dec_val_tmp
+        dec_val -= 0.053
+        dec_val *= 100.0
+
+        if dec_val < 0.0:
+            dec_val = 0.0
+        elif dec_val > 60.0:
+            dec_val = 60.0
+
+        return dec_val
 
 class Parrot():
     def __init__(self, address):
