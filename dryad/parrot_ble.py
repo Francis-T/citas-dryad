@@ -111,6 +111,7 @@ class CustomRequester(GATTRequester):
             print "%s : %s"  % (dtype, round(val,3))
 
         self.hevent.set()
+        return
 
     """
         Convenience function for retrieving data from our GATTRequester
@@ -280,7 +281,7 @@ class Parrot():
         return True
 
     def stop(self):
-        # TODO Check if the connection is available first !
+Parrot        # TODO Check if the connection is available first !
         self.req.write_by_handle(HDL_LIVE_NOTIF, '\x00')
         self.req.disconnect()
         return True
