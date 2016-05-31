@@ -222,7 +222,7 @@ class Parrot():
             except:
                 e = sys.exc_info()[0]
                 self.logger.exception(e)
-                self.exception("{}: FAILED".format(pset[0]))
+                self.logger.exception("{}: FAILED".format(pset[0]))
                 # return False
                 is_firmware_new = False
                 break

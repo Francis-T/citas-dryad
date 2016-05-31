@@ -133,28 +133,42 @@ def handle_mobile_nodes(mobile_conn, db):
         return False
  
     """ Draw unsent data from our database """
-    unsent_records = db.get_data()
-    resp_data = []
-    proc_ids = []
-    for record in unsent_records:
-        proc_ids.append( record[0] )
-        resp_data.append( {
-            "timestamp" : record[2],
-            "source" : record[1],
-            "data" : json.loads(record[3])
-        })
+    unsent_records = db.get_data(20)
+    while unsent_records != None:
+        proc_ids = []
+        resp_data = []
+        for record in unsent_records:
+            proc_ids.append( record[0] )
+            resp_data.append( {
+                "timestamp" : record[2],
+                "source" : record[1],
+                "data" : json.loads(record[3])
+            })
 
-    """ Send the data as a response """
-    if mobile_conn.send_response(resp_data) == False:
-        return False
+        """ Send the data as a response """
+        try:
+            if mobile_conn.send_response(resp_data) == False:
+                logger.error("Failed to send DATA response content")
+                return False
 
-    if mobile_conn.send_response("") == False:
-        return False
+            if mobile_conn.send_response("\r\n") == False:
+                logger.error("Failed to send DATA response terminator")
+                return False
+        except:
+            logger.error("Failed to send response due to an exception")
+            return False
 
-    """ Once data is sent successfully, we can mark off the records whose
-        IDs we took note of earlier in our database """
-    for rec_id in proc_ids:
-        db.set_data_uploaded(rec_id)
+        """ Once data is sent successfully, we can mark off the records whose
+            IDs we took note of earlier in our database """
+        for rec_id in proc_ids:
+            db.set_data_uploaded(rec_id)
+
+        """ Get a new batch of unsent records """
+        unsent_records = db.get_data(20)
+        
+        if len(unsent_records) < 1:
+            logger.info("No more data to send")
+            break
  
     if mobile_conn.disconnect() == False:
         return False
