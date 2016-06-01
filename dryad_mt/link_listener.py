@@ -15,7 +15,7 @@ from dryad.mobile_bt import MobileNode
 class LinkListenerThread(Thread):
 
     """ Initialization function """
-    def __init__(self, event, queue):
+    def __init__(self, request_handler):
         self.SOCKET_TIMEOUT  = 20.0
         self.IDLE_TIMEOUT    = 120.0
         self.RECEIVE_TIMEOUT = self.SOCKET_TIMEOUT * 1.5
@@ -23,8 +23,7 @@ class LinkListenerThread(Thread):
         self.MSG_TERM = ';'
         self.MSG_SEP = ','
 
-        self.queue = queue
-        self.hevent = event 
+        self.request_hdl = request_handler
         self.link = None
         self.is_running = False
         self.logger = logging.getLogger("main.dryad.LinkListenerThread")
@@ -123,12 +122,8 @@ class LinkListenerThread(Thread):
                         break
                     continue
 
-                # TODO Process the message
-                self.logger.info("Message received: {}".format(msg))
-
-                # TODO Trigger main thread events if necessary
-                self.queue.put(msg)
-                self.hevent.set()
+                # Process the message
+                self.request_hdl.handle_request(self.link, msg)
 
                 if self.link.is_connected() == False:
                     self.logger.info("Connection lost")

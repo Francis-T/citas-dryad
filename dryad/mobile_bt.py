@@ -45,6 +45,10 @@ class MobileNode():
         return True
 
     def receive_data(self):
+        if self.connected == False:
+            print("Not connected")
+            return False
+
         if self.client_sock == None:
             print("No clients to receive data from")
             return None
@@ -63,18 +67,22 @@ class MobileNode():
         return data
 
     def send_response(self, resp_data):
+        if self.connected == False:
+            print("Not connected")
+            return False
+
         if self.client_sock == None:
             print("No clients to respond to")
             return False
 
         print("Sending response...")
         try:
-            self.client_sock.send(json.dumps(resp_data))
+            self.client_sock.send(resp_data)
         except BluetoothError:
             self.connected = False
             return False
 
-        print("RESPONSE [%s]" % json.dumps(resp_data))
+        print("RESPONSE [%s]" % resp_data)
 
         return True
 

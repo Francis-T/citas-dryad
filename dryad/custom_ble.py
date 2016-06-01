@@ -32,7 +32,13 @@ def check_device_type(address, name):
     module_logger.info("Attempting to connect to " + name + "(" + address + ")...")
     req.connect(True)
 
-    primaries = req.discover_primary()
+    try:
+        primaries = req.discover_primary()
+    except:
+        module_logger.exception("Discover primary services failed")
+        req.disconnect()
+        return "UNKNOWN"
+
 #    try:
 #        req.discover_primary_async(response)
 #        if not response.wait(15):
