@@ -153,7 +153,8 @@ class CustomRequester(GATTRequester):
         return dec_val
 
     def conv_light(self, val):
-        #dec_val = 16655.6019 * pow(val, -1.0606619)
+        # TODO verify if conversion is correct
+	dec_val = 16655.6019 * pow(val, -1.0606619)
         return dec_val
 
     def conv_moisture(self, val):	
