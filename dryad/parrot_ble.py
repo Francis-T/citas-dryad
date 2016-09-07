@@ -108,7 +108,7 @@ class CustomRequester(GATTRequester):
         """ Store the value if it is valid """
         if val:
             self.data.append( { "time" : time.time(), "sensor" : dtype, "reading" : round(val,3) } )
-            print "%s : %s"  % (dtype, round(val,3))
+            print("%s : %s"  % (dtype, round(val,3)))
 
         self.hevent.set()
         return
@@ -212,7 +212,7 @@ class Parrot():
 
         # TODO Check if the connection is available first !
 
-        print "Starting live measurements..."
+        print("Starting live measurements...")
         """
             For each element in the BLE Characteristic table, write the 
             activation parameter (pset[2]) for each BLE characteristic
@@ -224,10 +224,10 @@ class Parrot():
                 self.req.write_by_handle(pset[1], pset[2])
             except:
                 e = sys.exc_info()[0]
-                print e
-                print ("{}: FAILED".format(pset[0]))
+                print(e)
+                print("{}: FAILED".format(pset[0]))
                 return False
-            print ("{}: OK".format(pset[0]))
+            print("{}: OK".format(pset[0]))
 
         is_firmware_new = True
         for pset in self.ble_char_new_tbl:
@@ -235,27 +235,27 @@ class Parrot():
                 self.req.write_by_handle(pset[1], pset[2])
             except:
                 e = sys.exc_info()[0]
-                print e
-                print ("{}: FAILED".format(pset[0]))
+                print(e)
+                print("{}: FAILED".format(pset[0]))
                 # return False
                 is_firmware_new = False
                 break
                 
-            print ("{}: OK".format(pset[0]))
+            print("{}: OK".format(pset[0]))
 
         if is_firmware_new:
             return True
 
-        print "Warning: Device might have older Parrot Flower Power firmware"
+        print("Warning: Device might have older Parrot Flower Power firmware")
         for pset in self.ble_char_old_tbl:
             try:
                 self.req.write_by_handle(pset[1], pset[2])
             except:
                 e = sys.exc_info()[0]
-                print e
+                print(e)
                 print ("{}: FAILED".format(pset[0]))
                 return False
-            print ("{}: OK".format(pset[0]))
+            print("{}: OK".format(pset[0]))
        
         return True
 
@@ -281,7 +281,7 @@ class Parrot():
         return True
 
     def stop(self):
-Parrot        # TODO Check if the connection is available first !
+        # TODO Check if the connection is available first !
         self.req.write_by_handle(HDL_LIVE_NOTIF, '\x00')
         self.req.disconnect()
         return True

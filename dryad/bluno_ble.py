@@ -29,7 +29,7 @@ class CustomRequester(GATTRequester):
         self.data = []
     
     def on_notification(self, handle, data):
-        print "Notif received: {}, {}".format(handle, data)
+        print("Notif received: {}, {}".format(handle, data))
         self.hevent.set()
         return
 
@@ -50,9 +50,9 @@ class Bluno():
         except:
             return False
 
-        print "Model No: {}".format(model_no)
+        print("Model No: {}".format(model_no))
 
-        print "Attempting to write to Command Characteristic..."
+        print("Attempting to write to Command Characteristic...")
         self.req.write_by_handle(HDL_COMMAND, DFR_PWD_STR)
         self.req.write_by_handle(HDL_COMMAND, DFR_BDR_STR)
         
@@ -62,7 +62,7 @@ class Bluno():
 
     def request(self, request):
         req_str = str(bytearray(request))
-        print req_str
+        print(req_str)
         self.req.write_by_handle(HDL_SERIAL, req_str)
         return True
 
@@ -82,7 +82,7 @@ class Bluno():
 #     handle_event.wait(5)
 #     counter -= 1
 #     handle_event.clear()
-#     print "Counts left:", counter
+#     print("Counts left:", counter)
 #     if ((10-counter) % 3) == 0:
 #         bluno_test.request(b"READ;\r\n")
 # 
