@@ -24,17 +24,17 @@ class DryadDatabase():
     def setup(self):
         """ Check if this database object is valid """
         if self.dbconn == None:
-            print "Invalid database"
+            print("Invalid database")
             return False
 
         """ Check if the required tables already exist. If so, return early """
         if self.check_tables():
-            print "Database already set up"
+            print("Database already set up")
             return True
         else:
-            print "Database not yet set up"
+            print("Database not yet set up")
 
-        print "Setting up the database..."
+        print("Setting up the database...")
 
         """ Identify our target table """
         table_name = "t_data_cache"
@@ -54,10 +54,10 @@ class DryadDatabase():
 
         """ And execute it using our database connection """
         if not self.perform(query):
-            print "Database setup failed"
+            print("Database setup failed")
             return False
 
-        print "Database setup succesful"
+        print("Database setup succesful")
         return True
 
     """ Check if the required tables are already in the database """
@@ -120,7 +120,7 @@ class DryadDatabase():
             cur.execute(query)
             result = cur.fetchall()
         except sqlite3.OperationalError:
-            #print "Failed to retrieve data"
+            #print("Failed to retrieve data")
             return None
 
         return result
@@ -157,7 +157,7 @@ class DryadDatabase():
 
             self.dbconn.commit()
         except sqlite3.OperationalError:
-            print "Query Failed: ", query
+            print("Query Failed: ", query)
             return False
         return True
 

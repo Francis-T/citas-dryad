@@ -42,12 +42,12 @@ def gather_device_data(name, address):
 
     """ Start the device """
     if device.start() == False:
-        print "Initialize failed"
+        print("Initialize failed")
         device.stop()
         return
 
-    print "Reading device name..."
-    print "Name:", device.get_name()
+    print("Reading device name...")
+    print("Name:", device.get_name())
 
     if USE_LED:
         device.trigger_led(True)
@@ -64,15 +64,15 @@ def gather_device_data(name, address):
                 break
             handle_event.clear()
     except KeyboardInterrupt:
-        print "Interrupted"
+        print("Interrupted")
 
     if USE_LED:
         device.trigger_led(False)
 
-    print "Finishing up live measurements..."
+    print("Finishing up live measurements...")
     device.stop()
 
-    print "Done."
+    print("Done.")
 
     return {"node_id" : name, "data" : device.get_data()}
     
@@ -84,7 +84,7 @@ def find_sensor_nodes():
     device_count = 0
     trial_count = MAX_TRIAL_COUNT
     while device_count < 1:
-        print "Looking for devices..."
+        print("Looking for devices...")
         devices = ble.scan_for_devices(2)
         device_count = len(devices.items())
         print("Found {} devices".format(device_count))
@@ -144,7 +144,7 @@ def handle_mobile_nodes(mobile_conn, db):
     return True
 
 def save_gathered_data(db, gathered_data):
-    print "Saving data to database..."
+    print("Saving data to database...")
     count = 0
     for node_data in gathered_data:
         source_id   = node_data['node_id']
@@ -156,10 +156,10 @@ def save_gathered_data(db, gathered_data):
 #                          "value" : sensor_data["reading"] }
             read_data = '{ "type" : "%s", "value" : %f }' % ( sensor_data["sensor"], sensor_data["reading"] )
             db.add_data(read_data, source=source_id, timestamp=ts)
-            # print "Data added: %s, %s, %li" % (str(read_data), source_id, ts)
+            # print("Data added: %s, %s, %li" % (str(read_data), source_id, ts)
 
             if (count % 5) == 0:
-                print "Data saved:", count," records"
+                print("Data saved:", count," records")
             count += 1
 
     return True
@@ -235,13 +235,12 @@ if not USE_INTERACTIVE:
 else:
     while True:
         if not main():
-            print "---------------------------------------------"
-            print "  Terminating program...Have a Nice Day! :)  "
-            print "---------------------------------------------"
+            print("---------------------------------------------")
+            print("  Terminating program...Have a Nice Day! :)  ")
+            print("---------------------------------------------")
             break
 
-        print "----------------------------------"
-        print "  Restarting after 10 seconds...  "
-        print "----------------------------------"
+        print("----------------------------------")
+        print("  Restarting after 10 seconds...  ")
+        print("----------------------------------")
         time.sleep(10.0)
-

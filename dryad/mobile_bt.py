@@ -24,19 +24,19 @@ class MobileNode():
         return True
 
     def listen(self):
-        print "Awaiting connections..."
+        print("Awaiting connections...")
         try:
             self.client_sock, client_info = self.server_sock.accept()
         except BluetoothError:
-            print "No connections found"
+            print("No connections found")
             return False
 
-        print "Connection accepted from", client_info
+        print("Connection accepted from", client_info)
         return True
 
     def receive_data(self):
         if self.client_sock == None:
-            print "No clients to receive data from"
+            print("No clients to receive data from")
             return None
 
         data = ""
@@ -49,16 +49,16 @@ class MobileNode():
                     data += temp_data
                     break
                 data += temp_data
-            print "Data received [%s]" % data
+            print("Data received [%s]" % data)
         except IOError:
-            print "Failed to receive data"
+            print("Failed to receive data")
             return None
 
         return data
 
     def send_response(self, resp_data):
         if self.client_sock == None:
-            print "No clients to respond to"
+            print("No clients to respond to")
             return False
 
         print("Sending response...")
@@ -69,7 +69,7 @@ class MobileNode():
 
     def disconnect(self):
         if self.client_sock == None:
-            print "No clients to disconnect from"
+            print("No clients to disconnect from")
             return False
 
         self.client_sock.close()

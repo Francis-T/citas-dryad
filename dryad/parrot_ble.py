@@ -108,7 +108,7 @@ class CustomRequester(GATTRequester):
         """ Store the value if it is valid """
         if val:
             self.data.append( { "time" : time.time(), "sensor" : dtype, "reading" : round(val,3) } )
-            print "%s : %s"  % (dtype, round(val,3))
+            print("%s : %s"  % (dtype, round(val,3)))
 
         self.hevent.set()
         return
@@ -135,12 +135,9 @@ class CustomRequester(GATTRequester):
         return  float(struct.unpack('<H', data[3:])[0])
 
     def conv_temp(self, val):
-        dec_val = 0.00000003044 * pow(val, 3.0)
-        dec_val -= 0.00008038 * pow(val, 2.0)
-        dec_val += 0.1149 * val
-        dec_val -= 30.449999999
-
-        if dec_val < -10.0:
+	dec_val = 0.00000003044 * pow(val, 3.0) - 0.00008038 * pow(val, 2.0) + val * 0.1149 - 30.449999999999999
+        
+	if dec_val < -10.0:
             dec_val = -10.0
         elif dec_val > 55.0:
             dec_val = 55.0
@@ -148,30 +145,23 @@ class CustomRequester(GATTRequester):
         return dec_val
 
     def conv_ec(self, val):
-        if val > 1771:
+        # TODO verify if conversion is correct
+	if val > 1771:
             return 10.0
         
         dec_val = (val / 1771.0) * 10.0
         return dec_val
 
     def conv_light(self, val):
-        dec_val = 16655.6019 * pow(val, -1.0606619)
+        # TODO verify if conversion is correct
+	dec_val = 16655.6019 * pow(val, -1.0606619)
         return dec_val
 
-    def conv_moisture(self, val):
-        dec_val_tmp = 0.0000000010698 * pow(val, 4.0)
-        dec_val_tmp -= 0.00000152538 * pow(val, 3.0)
-        dec_val_tmp += 0.000866976 * pow(val, 2.0)
-        dec_val_tmp -= 0.169422 * val
-        dec_val_tmp += 11.4293
-
-        dec_val = 0.0000045 * pow(dec_val_tmp, 3.0)
-        dec_val -= 0.00055 * pow(dec_val_tmp, 2.0)
-        dec_val += 0.0292 * dec_val_tmp
-        dec_val -= 0.053
-        dec_val *= 100.0
-
-        if dec_val < 0.0:
+    def conv_moisture(self, val):	
+       	dec_val_tmp = 11.4293 + (0.0000000010698 * pow(val, 4.0) - 0.00000152538 * pow(val, 3.0) + 0.000866976 * pow(val, 2.0) - 0.169422 * val)
+	dec_val = 100.0 * (0.0000045 * pow(dec_val_tmp, 3.0) - 0.00055 * pow(dec_val_tmp, 2.0) + 0.0292 * dec_val_tmp - 0.053)
+       
+	if dec_val < 0.0:
             dec_val = 0.0
         elif dec_val > 60.0:
             dec_val = 60.0
@@ -212,7 +202,7 @@ class Parrot():
 
         # TODO Check if the connection is available first !
 
-        print "Starting live measurements..."
+        print("Starting live measurements...")
         """
             For each element in the BLE Characteristic table, write the 
             activation parameter (pset[2]) for each BLE characteristic
@@ -224,10 +214,10 @@ class Parrot():
                 self.req.write_by_handle(pset[1], pset[2])
             except:
                 e = sys.exc_info()[0]
-                print e
-                print ("{}: FAILED".format(pset[0]))
+                print(e)
+                print("{}: FAILED".format(pset[0]))
                 return False
-            print ("{}: OK".format(pset[0]))
+            print("{}: OK".format(pset[0]))
 
         is_firmware_new = True
         for pset in self.ble_char_new_tbl:
@@ -235,27 +225,27 @@ class Parrot():
                 self.req.write_by_handle(pset[1], pset[2])
             except:
                 e = sys.exc_info()[0]
-                print e
-                print ("{}: FAILED".format(pset[0]))
+                print(e)
+                print("{}: FAILED".format(pset[0]))
                 # return False
                 is_firmware_new = False
                 break
                 
-            print ("{}: OK".format(pset[0]))
+            print("{}: OK".format(pset[0]))
 
         if is_firmware_new:
             return True
 
-        print "Warning: Device might have older Parrot Flower Power firmware"
+        print("Warning: Device might have older Parrot Flower Power firmware")
         for pset in self.ble_char_old_tbl:
             try:
                 self.req.write_by_handle(pset[1], pset[2])
             except:
                 e = sys.exc_info()[0]
-                print e
+                print(e)
                 print ("{}: FAILED".format(pset[0]))
                 return False
-            print ("{}: OK".format(pset[0]))
+            print("{}: OK".format(pset[0]))
        
         return True
 
@@ -281,7 +271,7 @@ class Parrot():
         return True
 
     def stop(self):
-Parrot        # TODO Check if the connection is available first !
+        # TODO Check if the connection is available first !
         self.req.write_by_handle(HDL_LIVE_NOTIF, '\x00')
         self.req.disconnect()
         return True
