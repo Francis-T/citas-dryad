@@ -5,6 +5,7 @@
         Source code for generic BLE functionality
 """
 from bluetooth.ble import DiscoveryService, GATTRequester, GATTResponse
+import logging
 
 UUID_BLUNO  = "0000dfb0-0000-1000-8000-00805f9b34fb"
 UUID_PARROT = "39e1fa00-84a8-11e2-afba-0002a5d5c51b"
@@ -19,12 +20,16 @@ def scan_for_devices(num):
 """
     Performs checks to determine the type of Sensor Node this BLE device is
 """
+
+module_logger = logging.getLogger("main.custom_ble")
+
 def check_device_type(address, name):
     device_type = "UNKNOWN"
     resp = GATTResponse()
     req = GATTRequester(address, False)
 
-    print("Attempting to connect to" + name + "(" + address + ")...")
+
+    module_logger.info("Attempting to connect to" + name + "(" + address + ")...")
     req.connect(True)
 
     primaries = req.discover_primary()

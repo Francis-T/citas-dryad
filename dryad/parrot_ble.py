@@ -7,6 +7,7 @@
 import struct
 import sys
 import time
+import logging
 from math import pow
 
 from bluetooth.ble import GATTRequester
@@ -52,6 +53,8 @@ HDL_CAL_EC_POR   = 0x57
 FLAG_NOTIF_ENABLE = "\x01\x00"
 FLAG_NOTIF_DISABLE = "\x00\x00"
 
+module_logger = logging.getLogger("main.parrot_ble")
+
 class CustomRequester(GATTRequester):
     DEF_MULT = 3.3
     DEF_DIV  = 2047 # 2047
@@ -59,7 +62,8 @@ class CustomRequester(GATTRequester):
     def __init__(self, notif_event, *args):
         GATTRequester.__init__(self, *args)
         self.hevent = notif_event
-        self.data = []
+        self.data = []  
+        self.logger = logging.getLogger("main.parrot_ble.CustomRequester")
 
     """ 
         Overrrides the on_notification() function of GATTRequester. This will 
@@ -106,9 +110,9 @@ class CustomRequester(GATTRequester):
             val = self.decode_float32(data)
         
         """ Store the value if it is valid """
-        if val:
-            self.data.append( { "time" : time.time(), "sensor" : dtype, "reading" : round(val,3) } )
-            print("%s : %s"  % (dtype, round(val,3)))
+        #if val:
+        self.data.append( { "time" : time.time(), "sensor" : dtype, "reading" : round(val,3) } )
+        self.logger.info("Received: %s : %s"  % (dtype, round(val,3)))
 
         self.hevent.set()
         return
@@ -146,20 +150,19 @@ class CustomRequester(GATTRequester):
 
     def conv_ec(self, val):
         # TODO verify if conversion is correct
-	if val > 1771:
+        if val > 1771:
             return 10.0
-        
         dec_val = (val / 1771.0) * 10.0
         return dec_val
 
     def conv_light(self, val):
         # TODO verify if conversion is correct
-	dec_val = 16655.6019 * pow(val, -1.0606619)
+    	dec_val = 16655.6019 * pow(val, -1.0606619)
         return dec_val
 
     def conv_moisture(self, val):	
-       	dec_val_tmp = 11.4293 + (0.0000000010698 * pow(val, 4.0) - 0.00000152538 * pow(val, 3.0) + 0.000866976 * pow(val, 2.0) - 0.169422 * val)
-	dec_val = 100.0 * (0.0000045 * pow(dec_val_tmp, 3.0) - 0.00055 * pow(dec_val_tmp, 2.0) + 0.0292 * dec_val_tmp - 0.053)
+        dec_val_tmp = 11.4293 + (0.0000000010698 * pow(val, 4.0) - 0.00000152538 * pow(val, 3.0) + 0.000866976 * pow(val, 2.0) - 0.169422 * val)
+        dec_val = 100.0 * (0.0000045 * pow(dec_val_tmp, 3.0) - 0.00055 * pow(dec_val_tmp, 2.0) + 0.0292 * dec_val_tmp - 0.053)
        
 	if dec_val < 0.0:
             dec_val = 0.0
@@ -172,6 +175,7 @@ class Parrot():
     def __init__(self, address):
         self.hevent = Event()
         self.req = CustomRequester(self.hevent, address, False)
+        self.logger = logging.getLogger("main.parrot_ble.Parrot")
         self.ble_char_tbl = [
             [ "Light Notif",            HDL_LIGHT_NOTIF,        FLAG_NOTIF_ENABLE],
             [ "Soil Temp Notif",        HDL_SOIL_TEMP_NOTIF,    FLAG_NOTIF_ENABLE],
@@ -200,55 +204,56 @@ class Parrot():
         if self.req.is_connected():
            print("Already Connected. Disconnecting old session...")
            self.req.disconnect()
-
         """ Connect using the GATTRequester """
         print("Connecting...")
         self.req.connect(True)
 
         # TODO Check if the connection is available first !
 
-        print("Starting live measurements...")
+        self.logger.info("Starting live measurements...")
         """
             For each element in the BLE Characteristic table, write the 
             activation parameter (pset[2]) for each BLE characteristic
             handle (pset[1]). The first field (pset[0]) is just a string
             identifier.
         """
+
         is_firmware_new = True
         for pset in self.ble_char_new_tbl:
             try:
                 self.req.write_by_handle(pset[1], pset[2])
             except:
                 e = sys.exc_info()[0]
-                print(e)
-                print("{}: FAILED".format(pset[0]))
+                self.logger.exception(e)
+                self.exception("{}: FAILED".format(pset[0]))
                 # return False
                 is_firmware_new = False
                 break
                 
-            print("{}: OK".format(pset[0]))
+            self.logger.info("{}: OK".format(pset[0]))
 
         if not is_firmware_new:
-            print("Warning: Device might have older Parrot Flower Power firmware")
+            self.logger.warning("Warning: Device might have older Parrot Flower Power firmware")
             for pset in self.ble_char_old_tbl:
                 try:
                     self.req.write_by_handle(pset[1], pset[2])
                 except:
                     e = sys.exc_info()[0]
-                    print(e)
-                    print ("{}: FAILED".format(pset[0]))
+                    self.logger.exception(e)
+                    self.logger.exception("{}: FAILED".format(pset[0]))
                     return False
-                print("{}: OK".format(pset[0]))
+                self.logger.info("{}: OK".format(pset[0]))
+
 
         for pset in self.ble_char_tbl:
             try:
                 self.req.write_by_handle(pset[1], pset[2])
             except:
                 e = sys.exc_info()[0]
-                print(e)
-                print("{}: FAILED".format(pset[0]))
+                self.logger.exception(e)
+                self.logger.exception("{}: FAILED".format(pset[0]))
                 return False
-            print("{}: OK".format(pset[0]))
+            self.logger.info("{}: OK".format(pset[0]))
        
         return True
 
@@ -265,7 +270,7 @@ class Parrot():
             name = data.decode("utf-8")
         except AttributeError:
             name = "[UNKNOWN]"
-
+            
         return name
 
     def trigger_led(self, activate=True):
