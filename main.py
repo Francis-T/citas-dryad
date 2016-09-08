@@ -13,10 +13,12 @@
 import time
 import string
 import json
+import sys
 # import pprint
 
 from dryad import custom_ble as ble
 from dryad import parrot_ble
+from dryad import bluno_ble
 from dryad import mobile_bt
 from dryad import database as ddb
 
@@ -35,29 +37,42 @@ def gather_device_data(name, address):
     if name == "":
         return
 
-    device = parrot_ble.Parrot(address)
+    # Setup the device object based on the type of sensor node
+    #   we're dealing with here
+    device = None
+    device_type = ble.check_device_type(address, name)
+    if device_type == "BLUNO_BEETLE":
+        device = bluno_ble.Bluno(address)
+    elif device_type == "PARROT_FP":
+        device = parrot_ble.Parrot(address)
 
-    """ Obtain the event handle """
+    if device == None:
+        print("Unknown handling for device")
+        return
+
+
+    # Obtain the event handle
     handle_event = device.get_event_hdl()
 
-    """ Start the device """
+    # Start the device
     if device.start() == False:
         print("Initialize failed")
         device.stop()
         return
 
     print("Reading device name...")
-    print("Name:", device.get_name())
+    print("Name:" + device.get_name())
 
-    if USE_LED:
-        device.trigger_led(True)
+    if device_type == "PARROT_FP":
+        if USE_LED:
+            device.trigger_led(True)
 
     print("Reading data...")
     counter = MAX_SAMPLE_COUNT
     try:
         stop_time = time.time() + 12.0
         while (counter > 0):
-            handle_event.wait(2000)
+            handle_event.wait(2)
             counter -= 1
             if time.time() > (stop_time):
                 print("Time limit reached.")
@@ -66,8 +81,9 @@ def gather_device_data(name, address):
     except KeyboardInterrupt:
         print("Interrupted")
 
-    if USE_LED:
-        device.trigger_led(False)
+    if device_type == "PARROT_FP":
+        if USE_LED:
+            device.trigger_led(False)
 
     print("Finishing up live measurements...")
     device.stop()
@@ -159,7 +175,7 @@ def save_gathered_data(db, gathered_data):
             # print("Data added: %s, %s, %li" % (str(read_data), source_id, ts)
 
             if (count % 5) == 0:
-                print("Data saved:", count," records")
+                print("Data saved:" + str(count) + " records")
             count += 1
 
     return True
@@ -178,10 +194,10 @@ def main():
     """ Initialize our database """
     db = ddb.DryadDatabase()
     if db.connect("dryad_test_cache.db") == False:
-        return
+        return False
 
     if db.setup() == False:
-        return
+        return False
 
     """ Initialize our Mobile Node link handler """
     mobile_link = mobile_bt.MobileNode()
@@ -202,7 +218,7 @@ def main():
 
             if len(data_record) > 0:
                 # Phase II : Save gathered data to a database
-                # save_gathered_data(db, data_record)   ## TODO DEBUG
+                save_gathered_data(db, data_record)
                 # pp = pprint.PrettyPrinter(indent=2)
                 # pp.pprint(data_record)
                 data_record = []
@@ -231,7 +247,11 @@ def main():
 
 ## MAIN PROGRAM ##
 if not USE_INTERACTIVE:
-    main()
+    if main() == False:
+        sys.exit(1)
+    else:
+        sys.exit(0)
+
 else:
     while True:
         if not main():
@@ -244,3 +264,4 @@ else:
         print("  Restarting after 10 seconds...  ")
         print("----------------------------------")
         time.sleep(10.0)
+

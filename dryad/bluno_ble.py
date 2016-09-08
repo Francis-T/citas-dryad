@@ -12,6 +12,7 @@ from bluetooth.ble import GATTRequester
 UUID_SERIAL     = "0000dfb1-0000-1000-8000-00805F9B34FB"
 UUID_COMMAND    = "0000dfb2-0000-1000-8000-00805F9B34FB"
 UUID_MODEL_NO   = "00002a24-0000-1000-8000-00805F9B34FB"
+UUID_NAME       = "00002a00-0000-1000-8000-00805f9b34fb"
 
 HDL_SERIAL  = 0x0025
 HDL_COMMAND = 0x0028
@@ -29,9 +30,19 @@ class CustomRequester(GATTRequester):
         self.data = []
     
     def on_notification(self, handle, data):
-        print("Notif received: {}, {}".format(handle, data))
+        # If the data is of interest to us, save it
+        if "pH" in data:
+            dtype = "pH"
+            val = float( data.strip().split(": ", 1)[1] )
+        
+            self.data.append( { "time" : time.time(), "sensor" : dtype, "reading" : round(val,3) } )
+            print("%s : %s"  % (dtype, round(val,3)))
+            
         self.hevent.set()
         return
+
+    def get_data(self):
+        return self.data
 
 class Bluno():
     def __init__(self, address):
@@ -51,14 +62,22 @@ class Bluno():
             return False
 
         print("Model No: {}".format(model_no))
-
-        print("Attempting to write to Command Characteristic...")
-        self.req.write_by_handle(HDL_COMMAND, DFR_PWD_STR)
-        self.req.write_by_handle(HDL_COMMAND, DFR_BDR_STR)
         
         self.req.write_by_handle(HDL_SERIAL, FLAG_NOTIF_ENABLE)
+        
+        print("Starting read...")
+        self.start_read()
 
         return True
+
+    def check(self):
+        return self.request("check")
+
+    def start_read(self):
+        return self.request("read.start")
+
+    def stop_read(self):
+        return self.request("read.stop")
 
     def request(self, request):
         req_str = str(bytearray(request))
@@ -66,25 +85,27 @@ class Bluno():
         self.req.write_by_handle(HDL_SERIAL, req_str)
         return True
 
+    def get_name(self):
+        name = "[UNKNOWN]"
+
+        # Check if the connection is available first !
+        if not self.req.is_connected():
+            print("Not Connected")
+            return name
+
+        data = self.req.read_by_uuid(UUID_NAME)[0]
+        try:
+            name = data.decode("utf-8")
+        except AttributeError:
+            name = "[UNKNOWN]"
+
+        return name
+
     def stop(self):
+        self.stop_read()
         self.req.disconnect()
         return
 
-# bluno_test = Bluno("C4:BE:84:28:89:4A")
-# handle_event = bluno_test.get_event_hdl()
-# bluno_test.start()
-# 
-# time.sleep(3)
-# 
-# bluno_test.request(b"READ;\r\n")
-# counter = 10
-# while counter > 0:
-#     handle_event.wait(5)
-#     counter -= 1
-#     handle_event.clear()
-#     print("Counts left:", counter)
-#     if ((10-counter) % 3) == 0:
-#         bluno_test.request(b"READ;\r\n")
-# 
-# bluno_test.stop()
+    def get_data(self):
+        return self.req.get_data()
 

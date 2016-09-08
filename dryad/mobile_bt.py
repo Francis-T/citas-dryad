@@ -31,7 +31,7 @@ class MobileNode():
             print("No connections found")
             return False
 
-        print("Connection accepted from", client_info)
+        print("Connection accepted from " + str(client_info))
         return True
 
     def receive_data(self):

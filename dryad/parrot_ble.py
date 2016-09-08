@@ -173,9 +173,9 @@ class Parrot():
         self.hevent = Event()
         self.req = CustomRequester(self.hevent, address, False)
         self.ble_char_tbl = [
-            [ "Live Notif",             HDL_LIVE_NOTIF,         '\x01'],
             [ "Light Notif",            HDL_LIGHT_NOTIF,        FLAG_NOTIF_ENABLE],
-            [ "Soil Temp Notif",        HDL_SOIL_TEMP_NOTIF,    FLAG_NOTIF_ENABLE]
+            [ "Soil Temp Notif",        HDL_SOIL_TEMP_NOTIF,    FLAG_NOTIF_ENABLE],
+            [ "Live Notif",             HDL_LIVE_NOTIF,         '\x01'],
         ]
 
         self.ble_char_old_tbl = [
@@ -197,7 +197,12 @@ class Parrot():
         return self.hevent
 
     def start(self):
+        if self.req.is_connected():
+           print("Already Connected. Disconnecting old session...")
+           self.req.disconnect()
+
         """ Connect using the GATTRequester """
+        print("Connecting...")
         self.req.connect(True)
 
         # TODO Check if the connection is available first !
@@ -209,16 +214,6 @@ class Parrot():
             handle (pset[1]). The first field (pset[0]) is just a string
             identifier.
         """
-        for pset in self.ble_char_tbl:
-            try:
-                self.req.write_by_handle(pset[1], pset[2])
-            except:
-                e = sys.exc_info()[0]
-                print(e)
-                print("{}: FAILED".format(pset[0]))
-                return False
-            print("{}: OK".format(pset[0]))
-
         is_firmware_new = True
         for pset in self.ble_char_new_tbl:
             try:
@@ -233,27 +228,39 @@ class Parrot():
                 
             print("{}: OK".format(pset[0]))
 
-        if is_firmware_new:
-            return True
+        if not is_firmware_new:
+            print("Warning: Device might have older Parrot Flower Power firmware")
+            for pset in self.ble_char_old_tbl:
+                try:
+                    self.req.write_by_handle(pset[1], pset[2])
+                except:
+                    e = sys.exc_info()[0]
+                    print(e)
+                    print ("{}: FAILED".format(pset[0]))
+                    return False
+                print("{}: OK".format(pset[0]))
 
-        print("Warning: Device might have older Parrot Flower Power firmware")
-        for pset in self.ble_char_old_tbl:
+        for pset in self.ble_char_tbl:
             try:
                 self.req.write_by_handle(pset[1], pset[2])
             except:
                 e = sys.exc_info()[0]
                 print(e)
-                print ("{}: FAILED".format(pset[0]))
+                print("{}: FAILED".format(pset[0]))
                 return False
             print("{}: OK".format(pset[0]))
        
         return True
 
     def get_name(self):
-        # TODO Check if the connection is available first !
-        data = self.req.read_by_uuid(UUID_NAME)[0]
         name = "[UNKNOWN]"
 
+        # Check if the connection is available first !
+        if not self.req.is_connected():
+            print("Not Connected")
+            return name
+
+        data = self.req.read_by_uuid(UUID_NAME)[0]
         try:
             name = data.decode("utf-8")
         except AttributeError:
@@ -262,7 +269,11 @@ class Parrot():
         return name
 
     def trigger_led(self, activate=True):
-        # TODO Check if the connection is available first !
+        # Check if the connection is available first !
+        if not self.req.is_connected():
+            print("Not Connected")
+            return False
+
         if activate:
             self.req.write_by_handle(HDL_LED, '\x01')
             return True
@@ -271,7 +282,10 @@ class Parrot():
         return True
 
     def stop(self):
-        # TODO Check if the connection is available first !
+        # Check if the connection is available first !
+        if not self.req.is_connected():
+            print("Not Connected")
+
         self.req.write_by_handle(HDL_LIVE_NOTIF, '\x00')
         self.req.disconnect()
         return True

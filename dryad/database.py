@@ -157,7 +157,7 @@ class DryadDatabase():
 
             self.dbconn.commit()
         except sqlite3.OperationalError:
-            print("Query Failed: ", query)
+            print("Query Failed: " + query)
             return False
         return True
 
