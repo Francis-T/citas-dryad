@@ -50,7 +50,7 @@ def gather_device_data(name, address):
         device = parrot_ble.Parrot(address)
 
     if device == None:
-        print("Unknown handling for device")
+        logger.info("Device detected neither a bluno nor parrot flower.")
         return
 
 

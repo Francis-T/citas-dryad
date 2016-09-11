@@ -11,10 +11,10 @@ class DryadClient:
         sock = BluetoothSocket( RFCOMM )
         sock.connect((bdaddr, port))
 
-        print "Sending data..."
+        print("Sending data...")
         sock.send("hello python111");
 
-        print "Receiving response..."
+        print("Receiving response...")
         data = ""
         seg_len = 2056
         is_seg_len_set = False
@@ -31,7 +31,7 @@ class DryadClient:
                 break
             if len(temp_data) < seg_len:
                 break
-        print "Data received [%s]" % data
+        print("Data received [%s]" % data)
 
         time.sleep(2.5)
 
@@ -40,5 +40,5 @@ class DryadClient:
         return
 
 dc = DryadClient()
-dc.run("00:1A:7D:DA:71:11", 1)
+dc.run("00:1A:7D:DA:71:0C", 1)
 
