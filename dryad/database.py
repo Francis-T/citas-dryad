@@ -6,14 +6,18 @@
 """
 import sqlite3
 import time
+import logging
 
 DEFAULT_DB_NAME = "dryad_cache.db"
 DEFAULT_GET_COND = "C_UPLOAD_TIME IS NULL"
+
+module_logger = logging.getLogger("main.database")
 
 class DryadDatabase():
     def __init__(self):
         self.db_name = ""
         self.dbconn = None
+        self.logger = logging.getLogger("main.database.DryadDatabase")
 
     """ Connect to the database """
     def connect(self, db_name=DEFAULT_DB_NAME):
@@ -24,17 +28,17 @@ class DryadDatabase():
     def setup(self):
         """ Check if this database object is valid """
         if self.dbconn == None:
-            print("Invalid database")
+            self.logger.error("Invalid database")
             return False
 
         """ Check if the required tables already exist. If so, return early """
         if self.check_tables():
-            print("Database already set up")
+            self.logger.debug("Database already set up")
             return True
         else:
-            print("Database not yet set up")
+            self.logger.debug("Database not yet set up")
 
-        print("Setting up the database...")
+        self.logger.info("Setting up the database...")
 
         """ Identify our target table """
         table_name = "t_data_cache"
@@ -54,10 +58,10 @@ class DryadDatabase():
 
         """ And execute it using our database connection """
         if not self.perform(query):
-            print("Database setup failed")
+            self.logger.error("Database setup failed")
             return False
 
-        print("Database setup succesful")
+        self.logger.info("Database setup succesful")
         return True
 
     """ Check if the required tables are already in the database """
@@ -156,8 +160,8 @@ class DryadDatabase():
                 self.dbconn.execute(query, extras)
 
             self.dbconn.commit()
-        except sqlite3.OperationalError:
-            print("Query Failed: " + query)
+        except sqlite3.OperationalError:           
+            self.logger.exception("Query Failed: ", query)
             return False
         return True
 

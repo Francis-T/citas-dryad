@@ -14,6 +14,8 @@ import time
 import string
 import json
 import sys
+import logging
+
 # import pprint
 
 from dryad import custom_ble as ble
@@ -21,6 +23,7 @@ from dryad import parrot_ble
 from dryad import bluno_ble
 from dryad import mobile_bt
 from dryad import database as ddb
+import test
 
 from threading import Event
 
@@ -33,7 +36,7 @@ USE_INTERACTIVE = False
     Performs data gathering from the BLE-based Sensor Nodes
 """
 def gather_device_data(name, address):
-    print("Found Device: name={}, address={}".format(name, address))
+    logger.info("Found Device: name={}, address={}".format(name, address))
     if name == "":
         return
 
@@ -47,7 +50,7 @@ def gather_device_data(name, address):
         device = parrot_ble.Parrot(address)
 
     if device == None:
-        print("Unknown handling for device")
+        logger.info("Device detected neither a bluno nor parrot flower.")
         return
 
 
@@ -60,14 +63,16 @@ def gather_device_data(name, address):
         device.stop()
         return
 
-    print("Reading device name...")
-    print("Name:" + device.get_name())
+
+    logger.info("Reading device name...")
+    logger.info("Name:{0}".format(device.get_name()))
 
     if device_type == "PARROT_FP":
         if USE_LED:
             device.trigger_led(True)
+            logger.info("Triggering Parrot flower LED")
 
-    print("Reading data...")
+    logger.info("Reading data...")
     counter = MAX_SAMPLE_COUNT
     try:
         stop_time = time.time() + 12.0
@@ -75,23 +80,23 @@ def gather_device_data(name, address):
             handle_event.wait(2)
             counter -= 1
             if time.time() > (stop_time):
-                print("Time limit reached.")
+                logger.info("Time limit reached.")
                 break
             handle_event.clear()
     except KeyboardInterrupt:
+        logger.exception("Keyboard Interrupt detected")
         print("Interrupted")
 
     if device_type == "PARROT_FP":
         if USE_LED:
             device.trigger_led(False)
 
-    print("Finishing up live measurements...")
+    logger.info("Finishing up live measurements...")
     device.stop()
 
     print("Done.")
 
     return {"node_id" : name, "data" : device.get_data()}
-    
 """
     Locates nearby BLE-based Sensor Nodes by conducting a BLE scan / discovery
 """
@@ -100,14 +105,14 @@ def find_sensor_nodes():
     device_count = 0
     trial_count = MAX_TRIAL_COUNT
     while device_count < 1:
-        print("Looking for devices...")
+        logger.info("Looking for devices...")
         devices = ble.scan_for_devices(2)
         device_count = len(devices.items())
-        print("Found {} devices".format(device_count))
+        logger.info("Found {} device/s".format(device_count))
         if device_count == 0:
             trial_count -= 1
             if trial_count < 0:
-                print("Could not find any nearby sensor nodes!")
+                logger.info("Could not find any nearby sensor nodes!")
                 break
         time.sleep(1.5)
     return devices
@@ -160,7 +165,7 @@ def handle_mobile_nodes(mobile_conn, db):
     return True
 
 def save_gathered_data(db, gathered_data):
-    print("Saving data to database...")
+    logger.info("Saving data to database...")
     count = 0
     for node_data in gathered_data:
         source_id   = node_data['node_id']
@@ -175,7 +180,7 @@ def save_gathered_data(db, gathered_data):
             # print("Data added: %s, %s, %li" % (str(read_data), source_id, ts)
 
             if (count % 5) == 0:
-                print("Data saved:" + str(count) + " records")
+                logger.info("Data saved:{0} records".format(count))
             count += 1
 
     return True
@@ -184,10 +189,33 @@ def save_gathered_data(db, gathered_data):
     Main function
 """
 def main():
+    # logger creation
+    global logger
+    logger = logging.getLogger("main")
+    logger.setLevel(logging.DEBUG)
+
+    # console handler
+    ch = logging.StreamHandler()
+    ch.setLevel(logging.DEBUG)
+
+    # file handler
+    fh = logging.FileHandler("cache_node.log")
+
+    # formatter
+    formatter = logging.Formatter("%(asctime)s - [%(levelname)s] [%(threadName)s] (%(module)s:%(lineno)d) %(message)s") 
+ 
+    # ch setting
+    ch.setFormatter(formatter)
+    logger.addHandler(ch)   
+
+    # fh setting
+    fh.setFormatter(formatter)
+    logger.addHandler(fh) 
+    
+    logger.info("Program has started.")     
+
     is_running = True
     data_record = []
-
-    """ setup GPIO control for LED """
     # GPIO.setmode(GPIO.BCM)
     # GPIO.setup(16, GPIO.OUT)
 
@@ -204,8 +232,8 @@ def main():
     mobile_link.init_socket(300.0)
 
     while True:
-        try:
-            # Phase I : Gather data from the sensor nodes ##
+        try:    
+            # Phase I: Gather data from the sensor nodes **
             devices = find_sensor_nodes()
 
             if len(devices.items()) <= 0:
@@ -227,7 +255,7 @@ def main():
                 handle_mobile_nodes(mobile_link, db)
 
         except KeyboardInterrupt:
-            print("Operation cancelled")
+            logger.info("Operation cancelled")
             is_running = False
             break
         if not USE_INTERACTIVE:
