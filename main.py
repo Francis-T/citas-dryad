@@ -97,7 +97,6 @@ def gather_device_data(name, address):
     print("Done.")
 
     return {"node_id" : name, "data" : device.get_data()}
-    
 """
     Locates nearby BLE-based Sensor Nodes by conducting a BLE scan / discovery
 """
