@@ -29,7 +29,7 @@ def check_device_type(address, name):
     req = GATTRequester(address, False)
 
 
-    module_logger.info("Attempting to connect to" + name + "(" + address + ")...")
+    module_logger.info("Attempting to connect to " + name + "(" + address + ")...")
     req.connect(True)
 
     primaries = req.discover_primary()
