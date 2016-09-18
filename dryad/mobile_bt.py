@@ -11,6 +11,8 @@ class MobileNode():
     def __init__(self):
         self.server_sock = BluetoothSocket(RFCOMM)
         self.client_sock = None
+        self.connected = False
+        return
 
     def init_socket(self, timeout=180.0):
         # Bind socket to a port and listen
@@ -23,6 +25,9 @@ class MobileNode():
         self.server_sock.settimeout(timeout)
         return True
 
+    def is_connected(self):
+        return self.connected
+
     def listen(self):
         print("Awaiting connections...")
         try:
@@ -31,7 +36,12 @@ class MobileNode():
             print("No connections found")
             return False
 
+        if client_info == None:
+            print("No connections found")
+            return False
+
         print("Connection accepted from " + str(client_info))
+        self.connected = True
         return True
 
     def receive_data(self):
@@ -39,20 +49,16 @@ class MobileNode():
             print("No clients to receive data from")
             return None
 
-        data = ""
         try:
-            while True:
-                temp_data = self.client_sock.recv(2056)
-                if len(temp_data) == 0:
-                    break
-                if len(temp_data) < 2056:
-                    data += temp_data
-                    break
-                data += temp_data
-            print("Data received [%s]" % data)
-        except IOError:
-            print("Failed to receive data")
+            data = self.client_sock.recv(2056)
+        except BluetoothError:
+            self.connected = False
             return None
+
+        if data == None:
+            return None
+
+        print("Data received [%s]" % data)
 
         return data
 
@@ -62,7 +68,12 @@ class MobileNode():
             return False
 
         print("Sending response...")
-        self.client_sock.send(json.dumps(resp_data))
+        try:
+            self.client_sock.send(json.dumps(resp_data))
+        except BluetoothError:
+            self.connected = False
+            return False
+
         print("RESPONSE [%s]" % json.dumps(resp_data))
 
         return True
@@ -73,9 +84,12 @@ class MobileNode():
             return False
 
         self.client_sock.close()
+        self.connected = False
         return True
 
     def destroy(self):
         self.server_sock.close()
+        self.connected = False
+        return
 
 

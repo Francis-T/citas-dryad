@@ -24,22 +24,8 @@ class DryadDatabase():
         self.dbconn = sqlite3.connect(db_name)
         return self.dbconn
 
-    """ Setup the database if it has not already been so """
-    def setup(self):
-        """ Check if this database object is valid """
-        if self.dbconn == None:
-            self.logger.error("Invalid database")
-            return False
-
-        """ Check if the required tables already exist. If so, return early """
-        if self.check_tables():
-            self.logger.debug("Database already set up")
-            return True
-        else:
-            self.logger.debug("Database not yet set up")
-
-        self.logger.info("Setting up the database...")
-
+    """ Setup the data cache table """
+    def setup_data_table(self):
         """ Identify our target table """
         table_name = "t_data_cache"
 
@@ -58,6 +44,27 @@ class DryadDatabase():
 
         """ And execute it using our database connection """
         if not self.perform(query):
+            return False
+
+        return True
+
+    """ Setup the database if it has not already been so """
+    def setup(self):
+        """ Check if this database object is valid """
+        if self.dbconn == None:
+            self.logger.error("Invalid database")
+            return False
+
+        """ Check if the required tables already exist. If so, return early """
+        if self.check_tables():
+            self.logger.debug("Database already set up")
+            return True
+        else:
+            self.logger.debug("Database not yet set up")
+
+        self.logger.info("Setting up the database...")
+
+        if self.setup_data_table() == False:
             self.logger.error("Database setup failed")
             return False
 
