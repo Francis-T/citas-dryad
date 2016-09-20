@@ -1,4 +1,6 @@
+decorator==4.0.10
 gattlib==0.20150805
+ipython-genutils==0.1.0
 pexpect==4.2.1
 pickleshare==0.7.4
 prompt-toolkit==1.0.7
