@@ -1,111 +1,263 @@
-"""
-    Name: bluno_ble.py
-    Author: Francis T
-    Description:
-        Source code for the Bluno BLE controller
-"""
-import time
+from bluepy.btle import Peripheral, UUID, DefaultDelegate
 from threading import Event
-from bluetooth.ble import GATTRequester
+from collections import defaultdict 
+from time import sleep
 
-""" Constants """
-UUID_SERIAL     = "0000dfb1-0000-1000-8000-00805F9B34FB"
-UUID_COMMAND    = "0000dfb2-0000-1000-8000-00805F9B34FB"
-UUID_MODEL_NO   = "00002a24-0000-1000-8000-00805F9B34FB"
-UUID_NAME       = "00002a00-0000-1000-8000-00805f9b34fb"
+import datetime
+import traceback
+import numpy as np
+import logging
 
-HDL_SERIAL  = 0x0025
-HDL_COMMAND = 0x0028
+## CONSTANTS ##
+SERVICES = {
+    "CTRL"        : "0000dfb000001000800000805f9b34fb",
+    "DEVINFO"    : "0000180a00001000800000805f9b34fb"
+}
 
-FLAG_NOTIF_ENABLE = "\x01\x00"
-FLAG_NOTIF_DISABLE = "\x00\x00"
+CTRL_CHARS = {
+    "SERIAL"    : "0000dfb100001000800000805f9b34fb",
+    "COMMAND"    : "0000dfb200001000800000805f9b34fb"
+}
 
+
+DEVINFO_CHARS = {
+    "MODEL_NO"    : "00002a2400001000800000805f9b34fb",
+    "NAME"        : "00002a0000001000800000805f9b34fb"  
+}
+
+SERIAL_HDL = 37
+
+MAX_CONN_RETRIES = 10
+
+# Security variables
 DFR_PWD_STR = str(bytearray(b"AT+PASSWOR=DFRobot\r\n"))
 DFR_BDR_STR = str(bytearray(b"AT+CURRUART=115200\r\n"))
 
-class CustomRequester(GATTRequester):
-    def __init__(self, notif_event, *args):
-        GATTRequester.__init__(self, *args)
-        self.hevent = notif_event
-        self.data = []
-    
-    def on_notification(self, handle, data):
-        # If the data is of interest to us, save it
-        if "pH" in data:
-            dtype = "pH"
-            val = float( data.strip().split(": ", 1)[1] )
-        
-            self.data.append( { "time" : time.time(), "sensor" : dtype, "reading" : round(val,3) } )
-            print("%s : %s"  % (dtype, round(val,3)))
-            
-        self.hevent.set()
+class PeripheralDelegate(DefaultDelegate):
+    def __init__(self, serial_ch, event, read_sample_size):
+        DefaultDelegate.__init__(self)
+        self.serial_ch = serial_ch
+        self.hevent = event
+        self.logger = logging.getLogger("main.bluno_ble.PeripheralDelegate")
+        self.readings_left = read_sample_size
+        self.readings = np.array([])
+
         return
 
-    def get_data(self):
-        return self.data
+    def handleNotification(self, cHandle, data):
+        data = str(data)
+        if cHandle is SERIAL_HDL:
+            print("YOUR DATA> " + str(data))
+            if "RUNDP:OK" in data:
+                self.logger.info("Bluno: Undeployed")
+
+            if "RDEPL:OK" in data:
+                self.logger.info("Bluno: Deployed")
+
+            if "pH" in data:
+                self.logger.info("Bluno: Data Received")
+                self.readings = np.append( self.readings,
+                                           { "PH": data.split("=")[1].split(";")[0].strip() } )
+                print( self.readings )
+
+                # Decrease the number of readings
+                self.readings_left -= 1
+
+                # Once the desired number of readings are reached, trigger the
+                #   handle event to signal that the contents can now be taken
+                if (self.readings_left <= 0):
+                    self.hevent.set()
+
+        return
+
+    # @desc     Returns the collected sensor readings to the calling function
+    # @return   A numpy array containing the collected readings
+    def get_readings(self):
+        return self.readings
 
 class Bluno():
-    def __init__(self, address):
-        self.hevent = Event()
-        self.req = CustomRequester(self.hevent, address, False)
+    def __init__(self, address, name, event):
+        self.ble_name = name
+        self.ble_addr = address
+        self.pdevice = None
+        self.pdelegate = None
+        self.is_connected = False
 
-    def get_event_hdl(self):
-        return self.hevent
+        self.hevent = event
 
-    def start(self):
-        """ Connect using the GATTRequester """
-        self.req.connect(True)
-        """ Try to pull the model number to see if this really is a Bluno """
-        try:
-            model_no = self.req.read_by_uuid(UUID_MODEL_NO)
-        except:
-            return False
+        self.read_sample_size = 10
+        self.logger = logging.getLogger("main.parrot_ble.Parrot")
 
-        print("Model No: {}".format(model_no))
-        
-        self.req.write_by_handle(HDL_SERIAL, FLAG_NOTIF_ENABLE)
-        
-        print("Starting read...")
-        self.start_read()
-
-        return True
-
-    def check(self):
-        return self.request("check")
-
-    def start_read(self):
-        return self.request("read.start")
-
-    def stop_read(self):
-        return self.request("read.stop")
-
-    def request(self, request):
-        req_str = str(bytearray(request))
-        print(req_str)
-        self.req.write_by_handle(HDL_SERIAL, req_str)
-        return True
-
-    def get_name(self):
-        name = "[UNKNOWN]"
-
-        # Check if the connection is available first !
-        if not self.req.is_connected():
-            print("Not Connected")
-            return name
-
-        data = self.req.read_by_uuid(UUID_NAME)[0]
-        try:
-            name = data.decode("utf-8")
-        except AttributeError:
-            name = "[UNKNOWN]"
-
-        return name
-
-    def stop(self):
-        self.stop_read()
-        self.req.disconnect()
         return
 
-    def get_data(self):
-        return self.req.get_data()
+    ## ---------------- ##
+    ## Public Functions ##
+    ## ---------------- ##
+
+    # @desc     Manually triggers connection to this sensor
+    # @return   A boolean indicating success or failure
+    def connect(self):
+        self.logger.info("Attempting to connect to {} [{}]".format(self.ble_name, self.ble_addr))
+        retries = 0
+
+        # Attempt to connect to the peripheral device a few times
+        is_connected = True
+        while (self.pdevice is None) and (retries < MAX_CONN_RETRIES):
+            is_connected = True
+            try:
+                self.pdevice = Peripheral(self.ble_addr, "public")
+            except Exception as err:
+                is_connected = False
+
+            retries += 1
+
+            sleep(6.0 + 1.0 * retries)
+            self.logger.info("Attempting to connect ({})...".format(retries))
+
+        # Check if connected
+        if (is_connected == False):
+            self.is_connected = False
+            self.logger.error("Failed to connect to device")
+        else:
+            self.is_connected = True
+            self.logger.info("Connected.")
+
+        return self.is_connected
+
+    # @desc     Starts a read operation on this sensor
+    # @return   A boolean indicating success or failure
+    def start(self):
+        # Ensure that we are connected
+        if (self.is_connected == False):
+            res = self.connect()
+            if (res == False):
+                self.logger.error("Cannot read from unconnected device")
+                return False
+        
+        # Setup the BLE peripheral delegate
+        serial_ch = self.get_serial()
+        self.pdelegate = PeripheralDelegate( serial_ch, self.hevent, self.read_sample_size )
+        self.pdevice.setDelegate( self.pdelegate )
+        
+        # TODO This shouldn't be here in the future since we expect the
+        #      sensor node to preserve its deployment state in-between
+        #      bootups
+        self.req_deploy(serial_ch)
+        self.pdevice.waitForNotifications(1.0)
+
+        # Send a QREAD request through the Serial
+        res = self.req_start_read(serial_ch)
+        if (res == False):
+            return False
+        self.pdevice.waitForNotifications(1.0)
+        self.pdevice.waitForNotifications(1.0)
+
+        ns = 0
+        while ns < self.read_sample_size:
+            self.pdevice.waitForNotifications(2.0)
+            ns += 1
+
+        return True
+
+    # @desc     Stops an ongoing sensor read operation
+    # @return   A boolean indicating success or failure
+    def stop(self):
+        if (self.is_connected == False):
+            self.logger.info("Already stopped")
+            return True
+
+        # Send a QSTOP request through the Serial
+        serial_ch = self.get_serial()
+        res = self.req_stop_read(serial_ch)
+        if (res == False):
+            return False
+
+        # TODO Disconnect from the device ?
+        self.pdevice.disconnect()
+        
+        return True
+
+    ## -------------- ##
+    ## Misc Functions ##
+    ## -------------- ##
+
+    # @desc     Returns the serial characteristic
+    # @return   A Characteristic object representing the Serial characteristic
+    def get_serial(self):
+        serial_ch = None
+        try:
+            ctrl_service = self.pdevice.getServiceByUUID(UUID(SERVICES["CTRL"]))
+            serial_ch = ctrl_service.getCharacteristics( UUID(CTRL_CHARS["SERIAL"]) )[0]
+        except Exception as err:
+            self.logger.exception(err)
+            return None
+
+        return serial_ch
+    
+    # @desc     Set the number of samples per read session
+    # @return   None
+    def set_read_sample_size(self, sample_size):
+        self.read_sample_size = sample_size
+        return
+
+    # @desc     Gets the readings from the Peripheral Delegate
+    # @return   A numpy array containing the collected readings
+    def get_readings(self):
+        if (self.pdelegate == None):
+            return None
+
+        return self.pdelegate.get_readings()
+
+    def get_readings_mean_var(self):
+        readings = self.get_readings()
+        if readings.size == 0:
+            return (0, 0) 
+        return (np.round(readings.mean(), 4), np.round(readings.var(),4))
+    
+    def get_agg_readings(self):
+        aggregated_data = defaultdict(int)
+        data = self.get_readings()
+        for entry in data:
+            aggregated_data["PH"] += float(entry["PH"])
+        data = {k: v / self.n_read for k, v in aggregated_data.items()} 
+        return self.add_timestamp(data)        
+
+    def isSuccess(self):
+        return self.isSuccess
+
+    def add_timestamp(self, data):
+        data["BL_TIMESTAMP"] = datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+        return data    
+
+    ## --------------- ##
+    ## Sensor Requests ##
+    ## --------------- ##
+
+    # @desc     Sends a request to the sensor through serial
+    # @return   A boolean indicating success or failure
+    def request(self, serial, contents):
+        if serial == None:
+            return False
+
+        try:
+            serial.write(str.encode(contents))
+        except Exception as err:
+            self.logger.exception(err)
+            return False
+
+        return True
+
+    def req_deploy(self, serial):
+        return self.request(serial, "QDEPL;\r\n")
+
+    def req_undeploy(self, serial):
+        return self.request(serial, "QUNDP;\r\n")
+
+    def req_start_read(self, serial):
+        return self.request(serial, "QREAD;\r\n")
+        
+    def req_stop_read(self, serial):
+        return self.request(serial, "QSTOP;\r\n")
+
+
 

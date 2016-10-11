@@ -1,297 +1,303 @@
-"""
-    Name: parrot_ble.py
-    Author: Francis T
-    Description:
-        Source code for the Parrot BLE controller
-"""
-import struct
-import sys
-import time
+from bluepy.btle import DefaultDelegate, Peripheral, UUID
+from threading import Event, Thread
+from collections import defaultdict
+from time import sleep
+
+import datetime
+import traceback
+import numpy as np
+import utils.transform as transform
 import logging
-from math import pow
 
-from bluetooth.ble import GATTRequester
-from threading import Event
 
-""" Constants """
-UUID_NAME       = "00002a00-0000-1000-8000-00805f9b34fb"
-UUID_LIGHT      = "39e1FA01-84a8-11e2-afba-0002a5d5c51b"
-UUID_SOIL_EC    = "39e1FA02-84a8-11e2-afba-0002a5d5c51b"
-UUID_SOIL_TEMP  = "39e1FA03-84a8-11e2-afba-0002a5d5c51b"
-UUID_AIR_TEMP   = "39e1FA04-84a8-11e2-afba-0002a5d5c51b"
-UUID_LIVE_NOTIF = "39e1FA06-84a8-11e2-afba-0002a5d5c51b"
+## Constants ##
+# Services
+SERVICES = {
+    "LIVE"            : "39e1fa0084a811e2afba0002a5d5c51b",
+    "BATTERY"        : 0x180f,
+    "DEVICE_INFO"    : 0x180a
+}
 
-HDL_LIVE_NOTIF  = 0x0039
-HDL_LED         = 0x003c
+# Sensors Characteristics (Old firmware)
+SENSORS = {
+    "SUNLIGHT"        : "39e1fa0184a811e2afba0002a5d5c51b",
+    "SOIL_EC"        : "39e1fa0284a811e2afba0002a5d5c51b",
+    "SOIL_TEMP"        : "39e1fa0384a811e2afba0002a5d5c51b",
+    "AIR_TEMP"        : "39e1fa0484a811e2afba0002a5d5c51b",
+    "SOIL_MOISTURE"    : "39e1fa0584a811e2afba0002a5d5c51b",
+}
 
-HDL_LIGHT_NOTIF     = 0x26
-HDL_SOIL_EC_NOTIF   = 0x2A
-HDL_SOIL_TEMP_NOTIF = 0x2e
-HDL_AIR_TEMP_NOTIF  = 0x32
-HDL_SOIL_VWC_NOTIF  = 0x36
+# Sensors Characteristics (New firmware)
+CAL_SENSORS = {
+    "SUNLIGHT"        : "39e1fa0184a811e2afba0002a5d5c51b",
+    "SOIL_EC"        : "39e1fa0284a811e2afba0002a5d5c51b",
+    "SOIL_TEMP"        : "39e1fa0384a811e2afba0002a5d5c51b",
+    "AIR_TEMP"        : "39e1fa0484a811e2afba0002a5d5c51b",
+    "VWC"            : "39e1fa0584a811e2afba0002a5d5c51b",
+    "CAL_VWC"        : "39e1fa0984a811e2afba0002a5d5c51b",
+    "CAL_AIR_TEMP"    : "39e1fa0a84a811e2afba0002a5d5c51b",
+    "CAL_DLI"        : "39e1fa0b84a811e2afba0002a5d5c51b",
+    "CAL_EA"        : "39e1fa0c84a811e2afba0002a5d5c51b",
+    "CAL_ECB"        : "39e1fa0d84a811e2afba0002a5d5c51b",
+    "CAL_EC_POROUS"    : "39e1fa0e84a811e2afba0002a5d5c51b",
+}
 
-HDL_CAL_SOIL_VWC_NOTIF  = 0x44
-HDL_CAL_AIR_TEMP_NOTIF  = 0x48
-HDL_CAL_DLI_NOTIF       = 0x4c
-HDL_CAL_EA_NOTIF        = 0x50
-HDL_CAL_ECB_NOTIF       = 0x54
-HDL_CAL_EC_POR_NOTIF    = 0x58
+# Control characteristics
+CONTROLS = {
+    "FIRMWARE_VER"        : 0x2a26,
+    "LIVE_MODE_PERIOD"    : "39e1fa0684a811e2afba0002a5d5c51b",   
+    "LED"                : "39e1fa0784a811e2afba0002a5d5c51b",
+    "LAST_MOVE_DATE"    : "39e1fa0884a811e2afba0002a5d5c51b", 
+    "BATTERY_LEVEL"        : 0x2a19
+}
 
-HDL_LIGHT     = 0x25
-HDL_SOIL_EC   = 0x29
-HDL_SOIL_TEMP = 0x2d
-HDL_AIR_TEMP  = 0x31
-HDL_SOIL_VWC  = 0x35
+MAX_CONN_RETRIES = 10
 
-HDL_CAL_SOIL_VWC = 0x43
-HDL_CAL_AIR_TEMP = 0x47
-HDL_CAL_DLI      = 0x4b
-HDL_CAL_EA       = 0x4f
-HDL_CAL_ECB      = 0x53
-HDL_CAL_EC_POR   = 0x57
+FLAG_NOTIF_ENABLE   = "\x01\x00"
+FLAG_NOTIF_DISABLE  = "\x00\x00"
 
-FLAG_NOTIF_ENABLE = "\x01\x00"
-FLAG_NOTIF_DISABLE = "\x00\x00"
 
-module_logger = logging.getLogger("main.parrot_ble")
-
-class CustomRequester(GATTRequester):
-    DEF_MULT = 3.3
-    DEF_DIV  = 2047 # 2047
-
-    def __init__(self, notif_event, *args):
-        GATTRequester.__init__(self, *args)
-        self.hevent = notif_event
-        self.data = []  
-        self.logger = logging.getLogger("main.parrot_ble.CustomRequester")
-
-    """ 
-        Overrrides the on_notification() function of GATTRequester. This will 
-         be called whenever a notif we are currently registered to on a BLE
-         device is updated with a new value
-    """
-    def on_notification(self, handle, data):
-        if handle == HDL_LIGHT:
-            dtype = "Light"
-            val = self.conv_light( self.get_charac_value(data) )
-        elif handle == HDL_SOIL_EC:
-            dtype = "Soil EC"
-            #val = (self.get_charac_value(data) * self.DEF_MULT) / self.DEF_DIV
-            val = self.conv_ec( self.get_charac_value(data) )
-        elif handle == HDL_SOIL_TEMP:
-            dtype = "Soil Temp"
-            # val = (self.get_charac_value(data) * self.DEF_MULT) / self.DEF_DIV
-            val = self.conv_temp( self.get_charac_value(data) )
-        elif handle == HDL_AIR_TEMP:
-            dtype = "Air Temp"
-            # val = (self.get_charac_value(data) * self.DEF_MULT) / self.DEF_DIV
-            val = self.conv_temp( self.get_charac_value(data) )
-        elif handle == HDL_SOIL_VWC:
-            dtype = "Soil VWC"
-            # val = (self.get_charac_value(data) * self.DEF_MULT) / self.DEF_DIV
-            val = self.conv_moisture( self.get_charac_value(data) )
-        elif handle == HDL_CAL_SOIL_VWC:
-            dtype = "Soil VSW (cal)"
-            val = self.decode_float32(data)
-        elif handle == HDL_CAL_AIR_TEMP:
-            dtype = "Air Temp (cal)"
-            val = self.decode_float32(data)
-        elif handle == HDL_CAL_DLI:
-            dtype = "DLI (cal)"
-            val = self.decode_float32(data)
-        elif handle == HDL_CAL_EA:
-            dtype = "EA (cal)"
-            val = self.decode_float32(data)
-        elif handle == HDL_CAL_ECB:
-            dtype = "ECB (cal)"
-            val = self.decode_float32(data)
-        elif handle == HDL_CAL_EC_POR:
-            dtype = "EC Porous (cal)"
-            val = self.decode_float32(data)
-        
-        """ Store the value if it is valid """
-        #if val:
-        self.data.append( { "time" : time.time(), "sensor" : dtype, "reading" : round(val,3) } )
-        self.logger.info("Received: %s : %s"  % (dtype, round(val,3)))
-
-        self.hevent.set()
+class ReadThread(Thread):
+    def __init__(self, pdevice, event):
+        Thread.__init__(self)
+        self.pdevice = pdevice
+        self.logger = logging.getLogger("main.parrot_ble.ReadThread")
+        self.readings = None
+        self.hevent = event
         return
 
-    """
-        Convenience function for retrieving data from our GATTRequester
-    """
-    def get_data(self):
-        return self.data
-
-    """
-        Decodes a 32-bit float from raw/binary data. This is necessary because 
-         some of the data retrieved from Parrot Flower Power is in such a 
-         format.
-    """
-    def decode_float32(self, data):
-        return struct.unpack('f', data[3:])[0]
-
-    """
-        Decodes data from the two byte (uint16) we receive from the Parrot 
-         Flower Power.
-    """
-    def get_charac_value(self, data):
-        return  float(struct.unpack('<H', data[3:])[0])
-
-    def conv_temp(self, val):
-        dec_val = 0.00000003044 * pow(val, 3.0) - 0.00008038 * pow(val, 2.0) + val * 0.1149 - 30.449999999999999
-        if dec_val < -10.0:
-            dec_val = -10.0
-        elif dec_val > 55.0:
-            dec_val = 55.0
-        return dec_val
-    
-    def conv_ec(self, val):
-        # TODO verify if conversion is correct
-        if val > 1771:
-            return 10.0
-        dec_val = (val / 1771.0) * 10.0
-        return dec_val
-
-    def conv_light(self, val):
-        # TODO verify if conversion is correct
-        dec_val = 16655.6019 * pow(val, -1.0606619)
-        return dec_val
-    
-    def conv_moisture(self, val):	
-        dec_val_tmp = 11.4293 + (0.0000000010698 * pow(val, 4.0) - 0.00000152538 * pow(val, 3.0) + 0.000866976 * pow(val, 2.0) - 0.169422 * val)
-        dec_val = 100.0 * (0.0000045 * pow(dec_val_tmp, 3.0) - 0.00055 * pow(dec_val_tmp, 2.0) + 0.0292 * dec_val_tmp - 0.053)
-
-        if dec_val < 0.0:
-            dec_val = 0.0
-        elif dec_val > 60.0:
-            dec_val = 60.0
-        return dec_val
-
-class Parrot():
-    def __init__(self, address):
-        self.hevent = Event()
-        self.req = CustomRequester(self.hevent, address, False)
-        self.logger = logging.getLogger("main.parrot_ble.Parrot")
-        self.ble_char_tbl = [
-            [ "Light Notif",            HDL_LIGHT_NOTIF,        FLAG_NOTIF_ENABLE],
-            [ "Soil Temp Notif",        HDL_SOIL_TEMP_NOTIF,    FLAG_NOTIF_ENABLE],
-            [ "Live Notif",             HDL_LIVE_NOTIF,         '\x01'],
-        ]
-
-        self.ble_char_old_tbl = [
-            [ "Air Temp Notif",        HDL_AIR_TEMP_NOTIF,    FLAG_NOTIF_ENABLE],
-            [ "Soil VWC Notif",        HDL_SOIL_VWC_NOTIF,    FLAG_NOTIF_ENABLE],
-            [ "Soil EC Notif",         HDL_SOIL_EC_NOTIF,    FLAG_NOTIF_ENABLE]
-        ]
-
-        self.ble_char_new_tbl = [
-            [ "Calib EA Notif",         HDL_CAL_EA_NOTIF,       FLAG_NOTIF_ENABLE],
-            [ "Calib Air Temp Notif",   HDL_CAL_AIR_TEMP_NOTIF, FLAG_NOTIF_ENABLE],
-            [ "Calib Soil VWC Notif",   HDL_CAL_SOIL_VWC_NOTIF, FLAG_NOTIF_ENABLE],
-            [ "Calib DLI Notif",        HDL_CAL_DLI_NOTIF,      FLAG_NOTIF_ENABLE],
-            [ "Calib ECB Notif",        HDL_CAL_ECB_NOTIF,      FLAG_NOTIF_ENABLE],
-            [ "Calib EC Porous Notif",  HDL_CAL_EC_POR_NOTIF,   FLAG_NOTIF_ENABLE]
-        ]
-
-    def get_event_hdl(self):
-        return self.hevent
-
-    def start(self):
-        if self.req.is_connected():
-           print("Already Connected. Disconnecting old session...")
-           self.req.disconnect()
-        """ Connect using the GATTRequester """
-        print("Connecting...")
-        self.req.connect(True)
-
-        # TODO Check if the connection is available first !
-
-        self.logger.info("Starting live measurements...")
-        """
-            For each element in the BLE Characteristic table, write the 
-            activation parameter (pset[2]) for each BLE characteristic
-            handle (pset[1]). The first field (pset[0]) is just a string
-            identifier.
-        """
-
-        is_firmware_new = True
-        for pset in self.ble_char_new_tbl:
-            try:
-                self.req.write_by_handle(pset[1], pset[2])
-            except:
-                e = sys.exc_info()[0]
-                self.logger.exception(e)
-                self.logger.exception("{}: FAILED".format(pset[0]))
-                # return False
-                is_firmware_new = False
-                break
-                
-            self.logger.info("{}: OK".format(pset[0]))
-
-        if not is_firmware_new:
-            self.logger.warning("Warning: Device might have older Parrot Flower Power firmware")
-            for pset in self.ble_char_old_tbl:
-                try:
-                    self.req.write_by_handle(pset[1], pset[2])
-                except:
-                    e = sys.exc_info()[0]
-                    self.logger.exception(e)
-                    self.logger.exception("{}: FAILED".format(pset[0]))
-                    return False
-                self.logger.info("{}: OK".format(pset[0]))
-
-
-        for pset in self.ble_char_tbl:
-            try:
-                self.req.write_by_handle(pset[1], pset[2])
-            except:
-                e = sys.exc_info()[0]
-                self.logger.exception(e)
-                self.logger.exception("{}: FAILED".format(pset[0]))
+    def run(self):
+        if self.pdevice == None:
+            self.logger.error("No device")
+            return False
+        
+        if self.pdevice.is_connected == False:
+            res = self.pdevice.connect()
+            if (res == False):
+                self.logger.error("Cannot read from unconnected device")
                 return False
-            self.logger.info("{}: OK".format(pset[0]))
-       
+
+        # Setup the 'connection'
+        self.pdevice.setup_conn()
+
+        # Retrieve the readings
+        self.readings = self.pdevice.read_sensors()
+        self.logger.info("Finished reading")
+
+        self.hevent.set()
+
+        self.pdevice.stop()
+
         return True
 
-    def get_name(self):
-        name = "[UNKNOWN]"
+    def get_readings(self):
+        return self.readings
 
-        # Check if the connection is available first !
-        if not self.req.is_connected():
-            print("Not Connected")
-            return name
+# Parrot class    
+class Parrot():    
+    def __init__(self, address, name, event):
+        self.ble_name = name
+        self.ble_addr = address
+        self.pdevice = None
+        self.pdelegate = None
+        self.is_connected = False
 
-        data = self.req.read_by_uuid(UUID_NAME)[0]
-        try:
-            name = data.decode("utf-8")
-        except AttributeError:
-            name = "[UNKNOWN]"
-            
-        return name
+        self.hevent = event
 
-    def trigger_led(self, activate=True):
-        # Check if the connection is available first !
-        if not self.req.is_connected():
-            print("Not Connected")
-            return False
+        self.read_sample_size = 1
+        self.live_measure_period = "\x01"
+        self.isNewFirmware = True
+        self.live_service = None
+        self.battery_service = None
 
-        if activate:
-            self.req.write_by_handle(HDL_LED, '\x01')
+        self.read_thread = None
+
+        self.logger = logging.getLogger("main.parrot_ble.Parrot")
+
+        return
+
+    ## ---------------- ##
+    ## Public Functions ##
+    ## ---------------- ##
+
+    # @desc     Manually triggers connection to this sensor
+    # @return   A boolean indicating success or failure
+    def connect(self):
+        self.logger.info("Attempting to connect to {} [{}]".format(self.ble_name, self.ble_addr))
+        retries = 0
+
+        # Attempt to connect to the peripheral device a few times
+        is_connected = True
+        while (self.pdevice is None) and (retries < MAX_CONN_RETRIES):
+            is_connected = True
+            try:
+                self.pdevice = Peripheral(self.ble_addr, "public")
+            except Exception as err:
+                is_connected = False
+
+            retries += 1
+
+            sleep(6.0 + 1.0 * retries)
+            self.logger.info("Attempting to connect ({})...".format(retries))
+
+        # Check if connected
+        if (is_connected == False):
+            self.is_connected = False
+            self.logger.error("Failed to connect to device")
+        else:
+            self.is_connected = True
+            self.logger.info("Connected.")
+
+        return self.is_connected
+
+    # @desc     Starts a read operation on this sensor
+    # @return   A boolean indicating success or failure
+    def start(self):
+        # # Ensure that we are connected
+        # if (self.is_connected == False):
+        #     res = self.connect()
+        #     if (res == False):
+        #         self.logger.error("Cannot read from unconnected device")
+        #         return False
+        # 
+        # # Setup the BLE peripheral delegate
+        # serial_ch = self.get_serial()
+        # self.pdelegate = PeripheralDelegate( serial_ch, self.hevent, self.read_sample_size )
+        # self.pdevice.setDelegate( self.pdelegate )
+        # 
+        # # TODO This shouldn't be here in the future since we expect the
+        # #      sensor node to preserve its deployment state in-between
+        # #      bootups
+        # self.start_deploy(serial_ch)
+
+        # # Send a QREAD request through the Serial
+        # res = self.req_start_read(serial_ch)
+        # if (res == False):
+        #     return False
+
+
+        if self.read_thread == None:
+            self.read_thread = ReadThread(self, self.hevent)
+            self.read_thread.start()
+
+        return True
+
+    # @desc     Stops an ongoing sensor read operation
+    # @return   A boolean indicating success or failure
+    def stop(self):
+        if (self.is_connected == False):
+            self.logger.info("Already stopped")
             return True
 
-        self.req.write_by_handle(HDL_LED, '\x00')
+        # TODO Disconnect from the device ?
+        self.pdevice.disconnect()
+        
         return True
 
-    def stop(self):
-        # Check if the connection is available first !
-        if not self.req.is_connected():
-            print("Not Connected")
+    ## -------------- ##
+    ## Misc Functions ##
+    ## -------------- ##
+    def get_readings(self):
+        if not self.read_thread == None:
+            return self.read_thread.get_readings()
 
-        self.req.write_by_handle(HDL_LIVE_NOTIF, '\x00')
-        self.req.disconnect()
+        return None
+
+    def set_live_measure_period(self):
+        # turning on live measure period, 1s
+        live_measure_ch = self.live_service.getCharacteristics(UUID(CONTROLS["LIVE_MODE_PERIOD"]))[0]
+        live_measure_ch.write(str.encode(self.live_measure_period))
+        
+    def switch_led(self, state):
+        led_control_ch = self.live_service.getCharacteristics(UUID(CONTROLS["LED"]))[0]
+        led_control_ch.write(str.encode(state))
+    
+    # returns whether parrot flower is the new version or not
+    def checkFirmware(self, firmware_version):
+        new_firmware_version = '1.1.0'
+        ver_number = firmware_version.decode("utf-8").split("_")[1].split("-")[1]
+        self.isNewFirmware = ver_number == new_firmware_version
+
+    def add_timestamp(self, data):
+        data["PF_TIMESTAMP"] = datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+        return data    
+    
+
+    # returns dictionary of sensor readings from parrot flower 
+    def read_sensors(self, sensors=["SUNLIGHT", "SOIL_EC", "SOIL_TEMP", "AIR_TEMP", "VWC", "CAL_VWC", "CAL_AIR_TEMP", "CAL_DLI", "CAL_EA", "CAL_ECB", "CAL_EC_POROUS", "BATTERY"]):
+        tr = transform.DataTransformation()
+        self.logger.info("Starting sensor readings...")    
+        
+        reading = dict.fromkeys(sensors)
+
+        battery_level_ch = self.battery_service.getCharacteristics(UUID(CONTROLS["BATTERY_LEVEL"]))[0]
+        battery_level = 0
+        
+        try:
+            # conversion from byte to decimal
+            battery_level = ord(battery_level_ch.read())
+            if "BATTERY" in reading.keys():
+                reading["BATTERY"] = battery_level
+        except Exception as err:
+            self.logger.exception(traceback.print_tb(err.__traceback__))
+
+        self.switch_led(FLAG_NOTIF_ENABLE)
+
+        # iterate over the calibrated sensors characteristics
+        for key, val in CAL_SENSORS.items():
+            char = self.live_service.getCharacteristics(UUID(val))[0]    
+            if char.supportsRead(): 
+                if key == "SUNLIGHT":
+                    reading[key] = tr.conv_light(tr.unpack_U16(char.read()))
+                elif key == "SOIL_EC":
+                    reading[key] = tr.conv_ec(tr.unpack_U16(char.read()))
+                elif key in ["AIR_TEMP", "SOIL_TEMP"]:
+                    reading[key] = tr.conv_temp(tr.unpack_U16(char.read()))
+                elif key == "VWC":
+                    reading[key] = tr.conv_moisture(tr.unpack_U16(char.read()))
+                else:
+                    reading[key] = tr.decode_float32(char.read())
+
+        self.switch_led(FLAG_NOTIF_DISABLE)
+        
+        return reading    
+
+    # returns aggregated (averaged) readings
+    def get_agg_readings(self):
+        # getting readings for N_READ times (3 times)        
+        readings = np.array()
+        temp_counter = self.n_read
+        while temp_counter != 0:
+            readings = np.append(readings, self.read_sensors())
+            temp_counter -= 1    
+        
+        aggregated_data = defaultdict(int)
+        for entry in readings:    
+            for key in entry.keys():
+                aggregated_data[key] += float(entry[key])
+        data = {k: v / self.n_read for k, v in aggregated_data.items()} 
+        return self.add_timestamp(data)    
+        
+    def setup_conn(self): 
+        # getting firmware version of parrotflower        
+        device_info_service = self.pdevice.getServiceByUUID(UUID(SERVICES["DEVICE_INFO"]))
+        firmware_ver_ch = device_info_service.getCharacteristics(UUID(CONTROLS["FIRMWARE_VER"]))[0]
+        
+        # check firmware
+        self.checkFirmware(firmware_ver_ch.read())
+
+        # getting live services and controlling led and live measure period
+        self.live_service = self.pdevice.getServiceByUUID(UUID(SERVICES["LIVE"]))  
+        # setting live measure period
+        self.set_live_measure_period()    
+    
+        # getting pf battery service
+        self.battery_service = self.pdevice.getServiceByUUID(UUID(SERVICES["BATTERY"]))
+
         return True
 
-    def get_data(self):
-        return self.req.get_data()
+
+    def disconnect(self):
+        self.pdevice.disconnect()
+        return
 

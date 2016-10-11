@@ -6,7 +6,7 @@
 import logging
 import json
 
-from Queue import Queue
+from queue import Queue
 from threading import Event
 
 from dryad.database import DryadDatabase
@@ -108,8 +108,7 @@ class RequestHandler():
             
             # Send our response
             try:
-                resp = '"content" : '
-                resp += json.dumps(resp_data)
+                resp = json.dumps(resp_data)
                 if link.send_response(resp) == False:
                     self.logger.error("Failed to send response")
                     db.disconnect()
@@ -125,11 +124,13 @@ class RequestHandler():
                 db.set_data_uploaded(rec_id)
 
             # Get a new batch of unsent records
-            records = db.get_data(20)
+            records = db.get_data(50)
             
             if len(records) < 1:
                 self.logger.info("No more data to send")
                 break
+
+            break
 
         db.disconnect()
 

@@ -1,0 +1,210 @@
+
+"""
+    Name: cache_node.py
+    Author: Francis T
+    Desc: Source code for the Python object representation of Cache Node
+"""
+import logging
+import dryad.custom_ble as ble
+
+from bluepy.btle import Scanner
+from threading import Event
+from dryad.database import DryadDatabase
+from dryad.bluno_ble import Bluno
+from dryad.parrot_ble import Parrot
+
+IDX_NODE_ADDR   = 0
+IDX_NODE_NAME   = 1
+IDX_NODE_TYPE   = 2
+IDX_NODE_CLASS  = 3
+
+NTYPE_UNKNOWN   = "UNKNOWN"
+NTYPE_UNUSED    = "UNUSED"
+NTYPE_SENSOR    = "SENSOR"
+
+ADTYPE_LOCAL_NAME = 9
+
+class CacheNode():
+
+    def __init__(self, db_name="dryad_test_cache.db"):
+        self.node_list = []
+        self.logger = logging.getLogger("main.cache_node.CacheNode")
+        self.db_name = db_name
+
+        return
+
+    ## ----------------------- ##
+    ## SECO1: Public Functions ##
+    ## ----------------------- ##
+
+    # @desc     Initializes the Cache Node
+    # @return   A boolean indicating success or failure
+    def initialize(self):
+        self.setup_database()
+        self.reload_node_list()
+        self.logger.info("Initialization Finished")
+        return True
+
+    # @desc     Scans for nearby BLE node devices
+    # @return   A boolean indicating success or failure
+    def scan_le_nodes(self):
+        scanner = Scanner()
+
+        self.logger.info("Scanning for devices...")
+        scanned_devices = scanner.scan(15.0)
+        self.logger.info("Scan finished.")
+
+        # Update the node list stored in our database
+        if self.update_node_list(scanned_devices) == False:
+            return False
+
+        # Reload our node list from the database
+        if self.reload_node_list() == False:
+            return False
+
+        return True
+
+    # @desc     Collects data from nearby sensors
+    # @params   queue - a non-null Queue object where completion tasks will be added
+    # @return   A boolean indicating success or failure
+    def collect_data(self, queue):
+        for node in self.node_list:
+            node_addr = node[ IDX_NODE_ADDR ]
+            node_name = node[ IDX_NODE_NAME ]
+            node_type = node[ IDX_NODE_TYPE ]
+            node_class = node[ IDX_NODE_CLASS ]
+
+            if (node_name == None) or (node_name == ''):
+                self.logger.info("Skipping blank named {}".format(node_addr))
+                continue
+
+            # If we do not know the class and type of this node, then attempt
+            #   to discover it by connecting to the device
+            if node_type == NTYPE_UNKNOWN:
+                node_class = ble.check_device_class( node_addr, node_name )
+                if ( not node_class == ble.NCLAS_UNKNOWN ):
+                    if ( node_class == ble.NCLAS_BLUNO ) or ( node_class == ble.NCLAS_PARROT ):
+                        node_type = NTYPE_SENSOR
+
+                    elif node_class == ble.NCLAS_UNUSED:
+                        node_type = NTYPE_UNUSED
+
+                    self.update_node_type( node_addr, node_type, node_class )
+
+            read_event = Event()
+
+            if node_class == ble.NCLAS_BLUNO:
+                # Instantiate this node
+                node_inst = self.instantiate_node(node_addr, node_name, node_type, node_class, read_event)
+                if node_inst == None:
+                    node.logger.error("Failed to instantiate node")
+                    return False
+
+                # Start collecting data from this node
+                self.collect_node_data(node_inst, read_event)
+
+        return
+
+    # @desc     Retrieves the list of LE nodes known by the Cache Node
+    # @return   A list of LE nodes
+    def get_le_node_list(self):
+        return self.node_list
+
+    ## --------------------- ##
+    ## SEC02: Misc Functions ##
+    ## --------------------- ##
+    def instantiate_node(self, address, name, n_type, n_class, event):
+        if n_class == ble.NCLAS_BLUNO:
+            return Bluno(address, name, event)
+
+        elif n_class == ble.NCLAS_PARROT:
+            return Parrot(address, name, event)
+
+        return None
+
+    def collect_node_data(self, node, event):
+        # Start a read operation on the sensor node
+        node.start()
+
+        event.wait(120.0)
+        event.clear()
+
+        print( str(node.get_readings()) )
+
+        node.stop()
+
+        return
+
+    ## -------------------------------------- ##
+    ## SEC03: Database Manipulation Functions ##
+    ## -------------------------------------- ##
+
+    # @desc     Sets up the database
+    # @return   A boolean indicating success or failure
+    def setup_database(self):
+        ddb = DryadDatabase()
+        if ddb.connect(self.db_name) == False:
+            self.logger.error("Failed to connect to database")
+            return False
+
+        # Setup the database if necessary
+        if ddb.setup() == False:
+            self.logger.error("Failed to setup database")
+            return False
+
+        ddb.disconnect()
+        return True
+
+    # @desc     Update node type info in the database
+    # @return   A boolean indicating success or failure
+    def update_node_type(self, addr, ntype, nclass=None):
+        ddb = DryadDatabase()
+        if ddb.connect(self.db_name) == False:
+            self.logger.error("Failed to connect to database")
+            return False
+
+        # Setup the database if necessary
+        if ddb.update_node(addr, node_type=ntype, node_class=nclass) == False:
+            self.logger.error("Failed to update node type in database")
+            return False
+
+        ddb.disconnect()
+        return True
+
+    # @desc     Reloads the node list from the database
+    # @return   A boolean indicating success or failure
+    def reload_node_list(self):        
+        ddb = DryadDatabase()
+        if ddb.connect(self.db_name) == False:
+            self.logger.error("Reload node list failed: Could not connect to database")
+            return False
+
+        # Reload our old node list
+        self.node_list = ddb.get_nodes('C_TYPE = "UNKNOWN" OR C_TYPE = "SENSOR"')
+
+        ddb.disconnect()
+        return True
+
+    # @desc     Updates the node list stored in the database
+    # @return   A boolean indicating success or failure
+    def update_node_list(self, node_list):
+        ddb = DryadDatabase()
+        if ddb.connect(self.db_name) == False:
+            logger.error("Update node list failed: Could not connect to database")
+            return False
+
+        for node in node_list:
+            # If this device already exists, then skip it
+            if ddb.get_node_info(node.addr):
+                continue
+
+            node_name = node.getValueText( ADTYPE_LOCAL_NAME )
+            if not node_name == None:
+                ddb.add_node_info(node.addr, node_name, "UNKNOWN")
+
+        ddb.disconnect()
+
+        return True
+
+
+

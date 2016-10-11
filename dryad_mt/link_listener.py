@@ -7,7 +7,7 @@
 import logging
 import time
 
-from Queue import Queue
+from queue import Queue
 from threading import Thread, Event
 
 from dryad.mobile_bt import MobileNode
@@ -16,7 +16,7 @@ class LinkListenerThread(Thread):
 
     """ Initialization function """
     def __init__(self, request_handler):
-        self.SOCKET_TIMEOUT  = 20.0
+        self.SOCKET_TIMEOUT  = 5.0
         self.IDLE_TIMEOUT    = 120.0
         self.RECEIVE_TIMEOUT = self.SOCKET_TIMEOUT * 1.5
         self.MAX_RECEIVE_LEN = 2048
@@ -66,7 +66,7 @@ class LinkListenerThread(Thread):
         # Keep trying to receive data until we've reached the projected receive
         #   timeout time OR this thread is no longer running
         while (time.time() < recv_end_time) and (self.is_running):
-            data_part = self.link.receive_data()
+            data_part = self.link.receive_data().decode("utf-8")
 
             # If the data part contains nothing, then try to receive data
             #   again if the thread is still running

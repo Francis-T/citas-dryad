@@ -40,24 +40,23 @@ def gather_device_data(name, address):
     if name == "":
         return
 
+    # Obtain the event handle
+    notif_event = Event()
+
     # Setup the device object based on the type of sensor node
     #   we're dealing with here
     device = None
     device_type = ble.check_device_type(address, name)
     if device_type == "BLUNO_BEETLE":
-        device = bluno_ble.Bluno(address)
+        device = bluno_ble.Bluno(address, name, notif_event)
     elif device_type == "PARROT_FP":
-        device = parrot_ble.Parrot(address)
+        device = parrot_ble.Parrot(address, name, notif_event)
 
     if device == None:
         logger.info("Device detected neither a bluno nor parrot flower.")
         return
 
-
-    # Obtain the event handle
-    handle_event = device.get_event_hdl()
-
-    # Start the device
+    # Start read operations on the device
     if device.start() == False:
         print("Initialize failed")
         device.stop()
@@ -73,19 +72,22 @@ def gather_device_data(name, address):
             logger.info("Triggering Parrot flower LED")
 
     logger.info("Reading data...")
-    counter = MAX_SAMPLE_COUNT
+
+    # Wait for the device to trigger a notif before bringing back the
+    #   data stored in said object
     try:
-        stop_time = time.time() + 12.0
-        while (counter > 0):
-            handle_event.wait(2)
-            counter -= 1
-            if time.time() > (stop_time):
-                logger.info("Time limit reached.")
-                break
-            handle_event.clear()
+        notif_event.wait(12.0)
     except KeyboardInterrupt:
         logger.exception("Keyboard Interrupt detected")
         print("Interrupted")
+
+    # Obtain the readings
+    readings = device.get_readings()
+    if readings == None:
+        logger.error("No readings")
+
+    # No need to clear the notif event here, but we'll do so anyway
+    notif_event.clear()
 
     if device_type == "PARROT_FP":
         if USE_LED:
@@ -96,7 +98,7 @@ def gather_device_data(name, address):
 
     print("Done.")
 
-    return {"node_id" : name, "data" : device.get_data()}
+    return { "node_id" : name, "data" : readings }
 
 """
     Locates nearby BLE-based Sensor Nodes by conducting a BLE scan / discovery

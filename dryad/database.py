@@ -138,7 +138,7 @@ class DryadDatabase():
 
         # Define the values to be inserted 
         if timestamp <= 0:
-            timestamp = long(time.time())
+            timestamp = int(time.time())
 
         values = '%li, "%s", "%s"' % (timestamp, source, data)
 
@@ -146,7 +146,7 @@ class DryadDatabase():
         query = "INSERT INTO %s (%s) VALUES (?, ?, ?);" % (table_name, columns)
 
         # And execute it using our database connection 
-        return self.perform(query, (long(timestamp), source, data))
+        return self.perform(query, (int(timestamp), source, data))
 
     """
         Retrieve data from the t_data_cache table in our database with the ff
@@ -187,7 +187,7 @@ class DryadDatabase():
 
         # Define the parts of our UPDATE query 
         table_name = "t_data_cache"
-        update = "C_UPLOAD_TIME = %li" % (long(time.time()))
+        update = "C_UPLOAD_TIME = %li" % (int(time.time()))
         condition = "C_ID = %i" % (rec_id)
 
         # Build our UPDATE query 
@@ -209,7 +209,7 @@ class DryadDatabase():
         # Build our INSERT query
         query = "INSERT INTO {} ({}) VALUES (?, ?, ?, ?);".format(table_name, columns)
 
-        return self.perform(query, (node_id, node_name, node_type, long(time.time())))
+        return self.perform(query, (node_id, node_name, node_type, int(time.time())))
         
     """
         Gets stored information on a particular node from the t_known_nodes table in
@@ -312,6 +312,7 @@ class DryadDatabase():
         Execute the query using the provided database connection
     """
     def perform(self, query, extras=None):
+        print("Query {" + query + "}")
         try:
             if extras == None:
                 self.dbconn.execute(query)
