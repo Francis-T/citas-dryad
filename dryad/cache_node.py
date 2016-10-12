@@ -8,7 +8,8 @@ import logging
 import dryad.custom_ble as ble
 
 from bluepy.btle import Scanner
-from threading import Event
+from threading import Thread, Event
+from time import sleep
 from dryad.database import DryadDatabase
 from dryad.bluno_ble import Bluno
 from dryad.parrot_ble import Parrot
@@ -23,6 +24,62 @@ NTYPE_UNUSED    = "UNUSED"
 NTYPE_SENSOR    = "SENSOR"
 
 ADTYPE_LOCAL_NAME = 9
+
+class ReadNodeTask(Thread):
+    def __init__(self, node_addr, node_name, node_type, node_class):
+        Thread.__init__(self)
+        self.node_addr = node_addr
+        self.node_name = node_name
+        self.node_type = node_type
+        self.node_class = node_class
+
+        return
+
+    ## --------------------- ##
+    ## SEC01: Main Functions ##
+    ## --------------------- ##
+    def run(self):
+        # Create the read completion notif event
+        read_event = Event()
+        
+        # Instantiate this node
+        node_inst = self.instantiate_node( self.node_addr,
+                                           self.node_name, 
+                                           self.node_type, 
+                                           self.node_class, 
+                                           read_event )
+        if node_inst == None:
+            node.logger.error("Failed to instantiate node")
+            return False
+
+        # Start collecting data from this node
+        self.collect_node_data(node_inst, read_event)
+
+        return
+
+    ## --------------------- ##
+    ## SEC02: Misc Functions ##
+    ## --------------------- ##
+    def instantiate_node(self, address, name, n_type, n_class, event):
+        if n_class == ble.NCLAS_BLUNO:
+            return Bluno(address, name, event)
+
+        elif n_class == ble.NCLAS_PARROT:
+            return Parrot(address, name, event)
+
+        return None
+
+    def collect_node_data(self, node, event):
+        # Start a read operation on the sensor node
+        node.set_read_sample_size(50)
+        node.start()
+
+        event.wait(240.0)
+        event.clear()
+
+        node.stop()
+
+        return
 
 class CacheNode():
 
@@ -51,7 +108,12 @@ class CacheNode():
         scanner = Scanner()
 
         self.logger.info("Scanning for devices...")
-        scanned_devices = scanner.scan(15.0)
+        try:
+            scanned_devices = scanner.scan(15.0)
+        except Exception as e:
+            self.logger.error("Scan Failed: " + str(e))
+            return False
+
         self.logger.info("Scan finished.")
 
         # Update the node list stored in our database
@@ -68,6 +130,7 @@ class CacheNode():
     # @params   queue - a non-null Queue object where completion tasks will be added
     # @return   A boolean indicating success or failure
     def collect_data(self, queue):
+        tasks = []
         for node in self.node_list:
             node_addr = node[ IDX_NODE_ADDR ]
             node_name = node[ IDX_NODE_NAME ]
@@ -90,18 +153,20 @@ class CacheNode():
                         node_type = NTYPE_UNUSED
 
                     self.update_node_type( node_addr, node_type, node_class )
+            
+            # Create and start a new ReadNode task
+            t = ReadNodeTask(node_addr, node_name, node_type, node_class)
+            t.start()
 
-            read_event = Event()
+            tasks.append(t)
+            sleep(1.0)
+        
+        # Wait until all read tasks have been completed
+        for t in tasks:
+            t.join(240.0)
+            self.logger.debug("{} completed".format(t.name))
 
-            if node_class == ble.NCLAS_BLUNO:
-                # Instantiate this node
-                node_inst = self.instantiate_node(node_addr, node_name, node_type, node_class, read_event)
-                if node_inst == None:
-                    node.logger.error("Failed to instantiate node")
-                    return False
-
-                # Start collecting data from this node
-                self.collect_node_data(node_inst, read_event)
+        self.logger.debug("Data Collection Finished")
 
         return
 
@@ -109,31 +174,6 @@ class CacheNode():
     # @return   A list of LE nodes
     def get_le_node_list(self):
         return self.node_list
-
-    ## --------------------- ##
-    ## SEC02: Misc Functions ##
-    ## --------------------- ##
-    def instantiate_node(self, address, name, n_type, n_class, event):
-        if n_class == ble.NCLAS_BLUNO:
-            return Bluno(address, name, event)
-
-        elif n_class == ble.NCLAS_PARROT:
-            return Parrot(address, name, event)
-
-        return None
-
-    def collect_node_data(self, node, event):
-        # Start a read operation on the sensor node
-        node.start()
-
-        event.wait(120.0)
-        event.clear()
-
-        print( str(node.get_readings()) )
-
-        node.stop()
-
-        return
 
     ## -------------------------------------- ##
     ## SEC03: Database Manipulation Functions ##

@@ -1,7 +1,7 @@
 from bluepy.btle import Peripheral, UUID, DefaultDelegate
 from threading import Event
 from collections import defaultdict 
-from time import sleep
+from time import sleep, time
 
 import datetime
 import traceback
@@ -39,6 +39,7 @@ class PeripheralDelegate(DefaultDelegate):
         self.serial_ch = serial_ch
         self.hevent = event
         self.logger = logging.getLogger("main.bluno_ble.PeripheralDelegate")
+
         self.readings_left = read_sample_size
         self.readings = np.array([])
 
@@ -102,12 +103,28 @@ class Bluno():
 
         # Attempt to connect to the peripheral device a few times
         is_connected = True
+        start_time = time()
         while (self.pdevice is None) and (retries < MAX_CONN_RETRIES):
             is_connected = True
+
+            conn_attempt_time = time()
             try:
                 self.pdevice = Peripheral(self.ble_addr, "public")
             except Exception as err:
                 is_connected = False
+
+            elapsed_time = time() - conn_attempt_time
+
+            # Leave the loop immediately if we're already connected
+            if ( is_connected ):
+                self.logger.debug("Overall connect time: {} secs".format(time() - start_time))
+                break
+
+            # Put out a warning and cut down retries if our connect attempt exceeds thresholds
+            if ( elapsed_time > 20 ):
+                self.logger.debug("Connect attempt took {} secs".format(elapsed_time))
+                self.logger.warning("Connect attempt exceeds threshold. Is the device nearby?")
+                break
 
             retries += 1
 

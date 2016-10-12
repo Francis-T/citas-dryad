@@ -29,15 +29,12 @@ class MobileNode():
         return self.connected
 
     def listen(self):
-        print("Awaiting connections...")
         try:
             self.client_sock, client_info = self.server_sock.accept()
         except BluetoothError:
-            print("No connections found")
             return False
 
         if client_info == None:
-            print("No connections found")
             return False
 
         print("Connection accepted from " + str(client_info))

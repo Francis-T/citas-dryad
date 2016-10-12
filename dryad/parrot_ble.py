@@ -1,7 +1,8 @@
 from bluepy.btle import DefaultDelegate, Peripheral, UUID
 from threading import Event, Thread
 from collections import defaultdict
-from time import sleep
+from time import sleep, time
+from pprint import pprint
 
 import datetime
 import traceback
@@ -58,30 +59,46 @@ FLAG_NOTIF_DISABLE  = "\x00\x00"
 
 
 class ReadThread(Thread):
-    def __init__(self, pdevice, event):
+    def __init__(self, pdevice, event, read_sample_size):
         Thread.__init__(self)
         self.pdevice = pdevice
-        self.logger = logging.getLogger("main.parrot_ble.ReadThread")
-        self.readings = None
         self.hevent = event
+        self.logger = logging.getLogger("main.parrot_ble.ReadThread")
+
+        self.readings = []
+        self.readings_left = read_sample_size
         return
 
     def run(self):
         if self.pdevice == None:
             self.logger.error("No device")
+            self.hevent.set()
             return False
         
         if self.pdevice.is_connected == False:
             res = self.pdevice.connect()
             if (res == False):
                 self.logger.error("Cannot read from unconnected device")
+                self.hevent.set()
                 return False
 
         # Setup the 'connection'
         self.pdevice.setup_conn()
 
-        # Retrieve the readings
-        self.readings = self.pdevice.read_sensors()
+        while self.readings_left > 0:
+            # Retrieve the readings
+            reading = self.pdevice.read_sensors()
+            
+            out_str = "[{}] ".format(self.pdevice.ble_name)
+            for key, val in reading.items():
+                out_str += "{} = {:.2f}, ".format(key, val)
+
+            print(out_str)
+
+            self.readings.append( reading )
+            self.readings_left -= 1
+            sleep(1.0)
+
         self.logger.info("Finished reading")
 
         self.hevent.set()
@@ -104,7 +121,7 @@ class Parrot():
 
         self.hevent = event
 
-        self.read_sample_size = 1
+        self.read_sample_size = 10
         self.live_measure_period = "\x01"
         self.isNewFirmware = True
         self.live_service = None
@@ -128,17 +145,33 @@ class Parrot():
 
         # Attempt to connect to the peripheral device a few times
         is_connected = True
+        start_time = time()
         while (self.pdevice is None) and (retries < MAX_CONN_RETRIES):
             is_connected = True
+
+            conn_attempt_time = time()
             try:
                 self.pdevice = Peripheral(self.ble_addr, "public")
             except Exception as err:
                 is_connected = False
 
+            elapsed_time = time() - conn_attempt_time
+
+            # Leave the loop immediately if we're already connected
+            if ( is_connected ):
+                self.logger.debug("Overall connect time: {} secs".format(time() - start_time))
+                break
+
+            # Put out a warning and cut down retries if our connect attempt exceeds thresholds
+            if ( elapsed_time > 20 ):
+                self.logger.debug("Connect attempt took {} secs".format(elapsed_time))
+                self.logger.warning("Connect attempt exceeds threshold. Is the device nearby?")
+                break
+
             retries += 1
 
             sleep(6.0 + 1.0 * retries)
-            self.logger.info("Attempting to connect ({})...".format(retries))
+            self.logger.debug("Attempting to connect ({})...".format(retries))
 
         # Check if connected
         if (is_connected == False):
@@ -153,31 +186,8 @@ class Parrot():
     # @desc     Starts a read operation on this sensor
     # @return   A boolean indicating success or failure
     def start(self):
-        # # Ensure that we are connected
-        # if (self.is_connected == False):
-        #     res = self.connect()
-        #     if (res == False):
-        #         self.logger.error("Cannot read from unconnected device")
-        #         return False
-        # 
-        # # Setup the BLE peripheral delegate
-        # serial_ch = self.get_serial()
-        # self.pdelegate = PeripheralDelegate( serial_ch, self.hevent, self.read_sample_size )
-        # self.pdevice.setDelegate( self.pdelegate )
-        # 
-        # # TODO This shouldn't be here in the future since we expect the
-        # #      sensor node to preserve its deployment state in-between
-        # #      bootups
-        # self.start_deploy(serial_ch)
-
-        # # Send a QREAD request through the Serial
-        # res = self.req_start_read(serial_ch)
-        # if (res == False):
-        #     return False
-
-
         if self.read_thread == None:
-            self.read_thread = ReadThread(self, self.hevent)
+            self.read_thread = ReadThread(self, self.hevent, self.read_sample_size)
             self.read_thread.start()
 
         return True
@@ -190,13 +200,19 @@ class Parrot():
             return True
 
         # TODO Disconnect from the device ?
-        self.pdevice.disconnect()
+        self.disconnect()
         
         return True
 
     ## -------------- ##
     ## Misc Functions ##
     ## -------------- ##
+    # @desc     Set the number of samples per read session
+    # @return   None
+    def set_read_sample_size(self, sample_size):
+        self.read_sample_size = sample_size
+        return
+
     def get_readings(self):
         if not self.read_thread == None:
             return self.read_thread.get_readings()
@@ -226,7 +242,6 @@ class Parrot():
     # returns dictionary of sensor readings from parrot flower 
     def read_sensors(self, sensors=["SUNLIGHT", "SOIL_EC", "SOIL_TEMP", "AIR_TEMP", "VWC", "CAL_VWC", "CAL_AIR_TEMP", "CAL_DLI", "CAL_EA", "CAL_ECB", "CAL_EC_POROUS", "BATTERY"]):
         tr = transform.DataTransformation()
-        self.logger.info("Starting sensor readings...")    
         
         reading = dict.fromkeys(sensors)
 
@@ -247,16 +262,19 @@ class Parrot():
         for key, val in CAL_SENSORS.items():
             char = self.live_service.getCharacteristics(UUID(val))[0]    
             if char.supportsRead(): 
-                if key == "SUNLIGHT":
-                    reading[key] = tr.conv_light(tr.unpack_U16(char.read()))
-                elif key == "SOIL_EC":
-                    reading[key] = tr.conv_ec(tr.unpack_U16(char.read()))
-                elif key in ["AIR_TEMP", "SOIL_TEMP"]:
-                    reading[key] = tr.conv_temp(tr.unpack_U16(char.read()))
-                elif key == "VWC":
-                    reading[key] = tr.conv_moisture(tr.unpack_U16(char.read()))
-                else:
-                    reading[key] = tr.decode_float32(char.read())
+                try:
+                    if key == "SUNLIGHT":
+                        reading[key] = tr.conv_light(tr.unpack_U16(char.read()))
+                    elif key == "SOIL_EC":
+                        reading[key] = tr.conv_ec(tr.unpack_U16(char.read()))
+                    elif key in ["AIR_TEMP", "SOIL_TEMP"]:
+                        reading[key] = tr.conv_temp(tr.unpack_U16(char.read()))
+                    elif key == "VWC":
+                        reading[key] = tr.conv_moisture(tr.unpack_U16(char.read()))
+                    else:
+                        reading[key] = tr.decode_float32(char.read())
+                except:
+                    self.logger.error("Failed to read and decode sensor data: " + str(char))
 
         self.switch_led(FLAG_NOTIF_DISABLE)
         
@@ -298,6 +316,10 @@ class Parrot():
 
 
     def disconnect(self):
-        self.pdevice.disconnect()
+        try:
+            self.pdevice.disconnect()
+        except Exception as e:
+            self.logger.error("Stop device failed: " + str(e))
+
         return
 

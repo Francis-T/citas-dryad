@@ -9,10 +9,16 @@ echo "Done."
 
 # Run the main program
 echo "Running program..."
-for i in {0..1};
+for i in {0..100};
 do
     echo "Iteration $i started."
-    sudo venv/bin/python main-mt.py;
+    sudo venv3/bin/python main-mt.py;
+    RES_CODE=$(echo $?)
+    if [ $RES_CODE -ne 0 ];
+    then
+        break;
+    fi;
+    
     echo "Iteration $1 finished."
 done;
 echo "Program finished. "

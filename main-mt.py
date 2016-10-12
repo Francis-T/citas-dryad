@@ -31,6 +31,28 @@ USE_LED = True
 
 CUSTOM_DATABASE_NAME = "dryad_test_cache.db"
 
+class InputThread(Thread):
+    def __init__(self, queue, hevent):
+        Thread.__init__(self)
+        self.queue = queue
+        self.hevent = hevent
+        return
+
+    def run(self):
+        is_running = True
+        while is_running:
+            cmd = input("> ")
+            if (cmd == "QUIT"):
+                self.queue.put("SHUTDOWN")
+                self.hevent.set()
+                is_running = False
+
+            if (cmd == "START"):
+                self.queue.put("ACTIVATE")
+                self.hevent.set()
+
+        return
+
 # @desc     Initializes the logger
 # @return   A boolean indicating success or failure
 def init_logger():
@@ -105,6 +127,9 @@ def main():
     # Initialize timing variables
     last_scan_time = 0.0
 
+    input_thread = InputThread(queue, trig_event)
+    input_thread.start()
+
     try:
         while True:
             # Wait for a trigger event
@@ -146,9 +171,6 @@ def main():
                 # Load basic sensor node info from the database
                 if ( cache_node.reload_node_list() == False ):
                     logger.info("Reload sensor node list failed")
-
-                node_list = cache_node.get_le_node_list()
-                print("Node List: " + str(node_list))
 
                 # Collect data (blocking)
                 cache_node.collect_data(queue)
