@@ -34,14 +34,16 @@ DFR_PWD_STR = str(bytearray(b"AT+PASSWOR=DFRobot\r\n"))
 DFR_BDR_STR = str(bytearray(b"AT+CURRUART=115200\r\n"))
 
 class PeripheralDelegate(DefaultDelegate):
-    def __init__(self, serial_ch, event, read_sample_size):
+    def __init__(self, pdevice, serial_ch, event, read_sample_size):
         DefaultDelegate.__init__(self)
+        self.pdevice = pdevice
         self.serial_ch = serial_ch
         self.hevent = event
         self.logger = logging.getLogger("main.bluno_ble.PeripheralDelegate")
 
         self.readings_left = read_sample_size
         self.readings = np.array([])
+        #self.readings = []
 
         return
 
@@ -55,11 +57,15 @@ class PeripheralDelegate(DefaultDelegate):
             if "RDEPL:OK" in data:
                 self.logger.info("Bluno: Deployed")
 
+            if "RDEND:OK" in data:
+                if (self.readings_left > 0):
+                    self.pdevice.req_start_read(self.serial_ch)
+
             if "pH" in data:
-                self.logger.info("Bluno: Data Received")
                 self.readings = np.append( self.readings,
                                            { "PH": data.split("=")[1].split(";")[0].strip() } )
-                print( self.readings )
+                # self.readings = np.append( self.readings, float(data.split("=")[1].split(";")[0].strip()))
+                # self.logger.info( "[BLUNO] pH mean = {}".format( np.mean(self.readings) ))
 
                 # Decrease the number of readings
                 self.readings_left -= 1
@@ -121,7 +127,7 @@ class Bluno():
                 break
 
             # Put out a warning and cut down retries if our connect attempt exceeds thresholds
-            if ( elapsed_time > 20 ):
+            if ( elapsed_time > 30.0 ):
                 self.logger.debug("Connect attempt took {} secs".format(elapsed_time))
                 self.logger.warning("Connect attempt exceeds threshold. Is the device nearby?")
                 break
@@ -153,7 +159,7 @@ class Bluno():
         
         # Setup the BLE peripheral delegate
         serial_ch = self.get_serial()
-        self.pdelegate = PeripheralDelegate( serial_ch, self.hevent, self.read_sample_size )
+        self.pdelegate = PeripheralDelegate( self, serial_ch, self.hevent, self.read_sample_size )
         self.pdevice.setDelegate( self.pdelegate )
         
         # TODO This shouldn't be here in the future since we expect the

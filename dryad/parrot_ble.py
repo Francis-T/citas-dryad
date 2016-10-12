@@ -52,10 +52,12 @@ CONTROLS = {
     "BATTERY_LEVEL"        : 0x2a19
 }
 
-MAX_CONN_RETRIES = 10
+MAX_CONN_RETRIES = 20
 
 FLAG_NOTIF_ENABLE   = "\x01\x00"
 FLAG_NOTIF_DISABLE  = "\x00\x00"
+
+DEBUG_RAW_DATA = True
 
 
 class ReadThread(Thread):
@@ -87,13 +89,13 @@ class ReadThread(Thread):
 
         while self.readings_left > 0:
             # Retrieve the readings
-            reading = self.pdevice.read_sensors()
+            reading = self.pdevice.read_sensors(sensors=["SOIL_TEMP", "AIR_TEMP", "CAL_AIR_TEMP"])
             
             out_str = "[{}] ".format(self.pdevice.ble_name)
             for key, val in reading.items():
                 out_str += "{} = {:.2f}, ".format(key, val)
 
-            print(out_str)
+            self.logger.info(out_str)
 
             self.readings.append( reading )
             self.readings_left -= 1
@@ -163,7 +165,7 @@ class Parrot():
                 break
 
             # Put out a warning and cut down retries if our connect attempt exceeds thresholds
-            if ( elapsed_time > 20 ):
+            if ( elapsed_time > 35.0 ):
                 self.logger.debug("Connect attempt took {} secs".format(elapsed_time))
                 self.logger.warning("Connect attempt exceeds threshold. Is the device nearby?")
                 break
@@ -260,17 +262,24 @@ class Parrot():
 
         # iterate over the calibrated sensors characteristics
         for key, val in CAL_SENSORS.items():
+            if key not in sensors:
+                # Skip all sensors we aren't reading this time
+                continue
+                
             char = self.live_service.getCharacteristics(UUID(val))[0]    
             if char.supportsRead(): 
                 try:
-                    if key == "SUNLIGHT":
-                        reading[key] = tr.conv_light(tr.unpack_U16(char.read()))
-                    elif key == "SOIL_EC":
-                        reading[key] = tr.conv_ec(tr.unpack_U16(char.read()))
-                    elif key in ["AIR_TEMP", "SOIL_TEMP"]:
-                        reading[key] = tr.conv_temp(tr.unpack_U16(char.read()))
-                    elif key == "VWC":
-                        reading[key] = tr.conv_moisture(tr.unpack_U16(char.read()))
+                    if DEBUG_RAW_DATA and (key in ["SUNLIGHT", "SOIL_EC", "AIR_TEMP", "SOIL_TEMP", "VWC"]):
+                        reading[key] = tr.unpack_U16(char.read())
+                    elif not DEBUG_RAW_DATA:
+                        if key == "SUNLIGHT":
+                            reading[key] = tr.conv_light(tr.unpack_U16(char.read()))
+                        elif key == "SOIL_EC":
+                            reading[key] = tr.conv_ec(tr.unpack_U16(char.read()))
+                        elif key in ["AIR_TEMP", "SOIL_TEMP"]:
+                            reading[key] = tr.conv_temp(tr.unpack_U16(char.read()))
+                        elif key == "VWC":
+                            reading[key] = tr.conv_moisture(tr.unpack_U16(char.read()))
                     else:
                         reading[key] = tr.decode_float32(char.read())
                 except:

@@ -1,6 +1,7 @@
 # updating & upgrading aptitude repositories
 echo "Updating repositories"
-sudo apt-get update && sudo apt-get -y upgrade
+sudo apt-get update 
+#&& sudo apt-get -y upgrade
 
 # retrieving and installing bluez
 echo "Retrieving and installation of bluez"
@@ -42,6 +43,7 @@ virtualenv -p /usr/bin/python3.4 venv
 . venv/bin/activate
 
 # installation of required python modules
-pip install pybluez[ble]
-pip install -r requirements.txt
+# pip install -r requirements.txt
+pip install pybluez
+pip install bluepy
 

@@ -109,12 +109,14 @@ class CacheNode():
 
         self.logger.info("Scanning for devices...")
         try:
-            scanned_devices = scanner.scan(15.0)
+            scanned_devices = scanner.scan(25.0)
         except Exception as e:
             self.logger.error("Scan Failed: " + str(e))
             return False
 
         self.logger.info("Scan finished.")
+
+        self.logger.debug("Scanned Devices = {}".format(scanned_devices))
 
         # Update the node list stored in our database
         if self.update_node_list(scanned_devices) == False:
@@ -159,6 +161,7 @@ class CacheNode():
             t.start()
 
             tasks.append(t)
+
             sleep(1.0)
         
         # Wait until all read tasks have been completed

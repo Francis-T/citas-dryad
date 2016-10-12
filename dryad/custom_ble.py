@@ -31,7 +31,9 @@ module_logger = logging.getLogger("main.custom_ble")
 def scan_for_devices(num):
     scanner = Scanner()
     module_logger.info("Scanning for devices...")
-    return scanner.scan(10.0)
+    scanned_devices = scanner.scan(20.0)
+    module_logger.info("Scan finished")
+    return scanned_devices
 
 # @desc     Performs checks to determine the type of Sensor Node this BLE device is
 # @return   A String containing the device class

@@ -2,6 +2,9 @@
 
 # Set the HCI Config to PSCAN so that other devices can connect to it
 echo "Configuring Bluetooth adapter..."
+sudo hciconfig hci1 down
+sudo hciconfig hci0 down
+sudo hciconfig hci0 up
 sudo hciconfig hci0 piscan
 echo "Done."
 
