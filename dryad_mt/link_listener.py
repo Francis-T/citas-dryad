@@ -20,7 +20,7 @@ class LinkListenerThread(Thread):
         self.IDLE_TIMEOUT    = 120.0
         self.RECEIVE_TIMEOUT = self.SOCKET_TIMEOUT * 1.5
         self.MAX_RECEIVE_LEN = 2048
-        self.MSG_TERM = ';'
+        self.MSG_TERM = '\n'
         self.MSG_SEP = ','
 
         self.request_hdl = request_handler

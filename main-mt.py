@@ -22,7 +22,7 @@ from dryad_mt.link_listener import LinkListenerThread
 from dryad_mt.node_state import NodeState
 
 TRIG_EVENT_TIMEOUT = 120.0
-SAMPLING_INTERVAL = 10.0
+SAMPLING_INTERVAL = 60.0 * 12.0
 #SAMPLING_INTERVAL = 240.0
 MAX_TRIAL_COUNT = 10
 MAX_SAMPLE_COUNT = 100
@@ -147,8 +147,9 @@ def main():
 
             if msg == "ACTIVATE":
                 if sampling_timer.is_alive() == False:
-                    sampling_timer = Timer(SAMPLING_INTERVAL, add_sampling_task)
-                    sampling_timer.start()
+                    # sampling_timer = Timer(SAMPLING_INTERVAL, add_sampling_task)
+                    # sampling_timer.start()
+                    add_sampling_task()
                     state.set_state("IDLE")
 
             elif msg == "DEACTIVATE":

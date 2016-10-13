@@ -58,6 +58,8 @@ class ReadNodeTask(Thread):
         # Start collecting data from this node
         self.node_readings = self.collect_node_data(node_inst, read_event)
 
+        print("READINGS>> " + str(self.get_readings()))
+
         return
 
     ## --------------------- ##
@@ -97,6 +99,7 @@ class CacheNode():
         self.node_list = []
         self.logger = logging.getLogger("main.cache_node.CacheNode")
         self.db_name = db_name
+        self.read_tasks = []
 
         return
 
@@ -150,7 +153,6 @@ class CacheNode():
     # @params   queue - a non-null Queue object where completion tasks will be added
     # @return   A boolean indicating success or failure
     def collect_data(self, queue):
-        tasks = []
         for node in self.node_list:
             node_addr = node[ IDX_NODE_ADDR ]
             node_name = node[ IDX_NODE_NAME ]
@@ -178,18 +180,18 @@ class CacheNode():
             t = ReadNodeTask(node_addr, node_name, node_type, node_class)
             t.start()
 
-            tasks.append(t)
+            self.read_tasks.append(t)
 
             sleep(1.0)
         
-        # Wait until all read tasks have been completed
-        for t in tasks:
-            t.join(240.0)
-            self.logger.debug("{} completed".format(t.name))
+        # # Wait until all read tasks have been completed
+        # for t in tasks:
+        #     t.join(240.0)
+        #     self.logger.debug("{} completed".format(t.name))
 
-            print("READINGS>> " + str(t.get_readings()))
+        #     print("READINGS>> " + str(t.get_readings()))
 
-        self.logger.debug("Data Collection Finished")
+        # self.logger.debug("Data Collection Finished")
 
         return
 

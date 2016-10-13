@@ -146,7 +146,7 @@ class RequestHandler():
             return False
 
         req_hdr = req_parts[0]
-        req_content = req_parts[1].strip(';')
+        req_content = req_parts[1].strip(';').strip()
 
         if req_hdr == "QSTAT":
             # State request
