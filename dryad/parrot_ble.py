@@ -89,6 +89,20 @@ class ReadThread(Thread):
         # Setup the 'connection'
         self.pdevice.setup_conn()
 
+        try:
+            self.perform_read()
+        except Exception as e:
+            self.logger.error("Exception occurred: " + str(e))
+
+        self.logger.info("Finished reading")
+
+        self.hevent.set()
+
+        self.pdevice.stop()
+
+        return True
+
+    def perform_read(self):
         while self.should_continue_read():
             # Retrieve the readings
             reading = self.pdevice.read_sensors(sensors=["SOIL_TEMP", "AIR_TEMP", "CAL_AIR_TEMP"])
@@ -103,15 +117,13 @@ class ReadThread(Thread):
             self.readings_left -= 1
             sleep(1.0)
 
-        self.logger.info("Finished reading")
-
-        self.hevent.set()
-
-        self.pdevice.stop()
-
-        return True
+        return
 
     def should_continue_read(self):
+        # If we're no longer connected, then stop reading
+        if self.pdevice.is_connected == False:
+            return False
+
         # If the current time exceeds our read until value,
         #   then return False immediately to stop reading
         if (self.read_until > 0) and (time() > self.read_until):

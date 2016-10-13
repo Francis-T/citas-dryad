@@ -79,6 +79,10 @@ class PeripheralDelegate(DefaultDelegate):
         return
 
     def should_continue_read(self):
+        # If we're no longer connected, then stop reading
+        if self.pdevice.is_connected == False:
+            return False
+
         # If the current time exceeds our read until value,
         #   then return False immediately to stop reading
         if (self.read_until > 0) and (time() > self.read_until):

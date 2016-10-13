@@ -36,6 +36,7 @@ class InputThread(Thread):
         Thread.__init__(self)
         self.queue = queue
         self.hevent = hevent
+        self.is_running = False
         return
 
     def run(self):
@@ -51,6 +52,10 @@ class InputThread(Thread):
                 self.queue.put("ACTIVATE")
                 self.hevent.set()
 
+        return
+
+    def cancel(self):
+        self.is_running = False
         return
 
 # @desc     Initializes the logger
@@ -147,8 +152,6 @@ def main():
 
             if msg == "ACTIVATE":
                 if sampling_timer.is_alive() == False:
-                    # sampling_timer = Timer(SAMPLING_INTERVAL, add_sampling_task)
-                    # sampling_timer.start()
                     add_sampling_task()
                     state.set_state("IDLE")
 
@@ -176,33 +179,27 @@ def main():
                 # Collect data (blocking)
                 cache_node.collect_data(queue)
 
-                # cache_node.reload_node_list()
-                # node_list = cache_node.get_le_node_list()
-                # print("Node List: " + str(node_list))
-
-                # # Gather data from the known sensor nodes
-                # data_record = []
-                # for node in node_list:
-                #     node_data = gather_sensor_data(str(node[0]), str(node[1]), str(node[2]), str(node[3]))
-                #     if node_data:
-                #         data_record.append(node_data)
-                # 
-                # # Save gathered data to the database if there are any
-                # if len(data_record) > 0:
-                #     offload_sensor_data(data_record)
-
-                # Recreate the sampling timer again
                 sampling_timer = Timer(SAMPLING_INTERVAL, add_sampling_task)
                 sampling_timer.start()
-                
 
     except KeyboardInterrupt:
         logger.info("Interrupted")
         exit_code = -1
 
     # Cancel running threads
-    listen_thread.cancel()
-    listen_thread.join()
+    cache_node.cancel_read()
+
+    if sampling_timer.is_alive():
+        sampling_timer.cancel()
+        sampling_timer.join(20.0)
+
+    if listen_thread.is_alive():
+        listen_thread.cancel()
+        listen_thread.join(20.0)
+
+    if input_thread.is_alive():
+        input_thread.cancel()
+        input_thread.join(20.0)
 
     logger.info("Program finished")
 

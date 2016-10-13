@@ -25,15 +25,45 @@ NTYPE_SENSOR    = "SENSOR"
 
 ADTYPE_LOCAL_NAME = 9
 
-class ReadNodeTask(Thread):
-    def __init__(self, node_addr, node_name, node_type, node_class):
+class ReadCompletionWaitTask(Thread):
+    def __init__(self, cnode, read_threads):
         Thread.__init__(self)
+        self.read_threads = read_threads
+        self.logger = logging.getLogger("main.cache_node.ReadCompletionWaitTask")
+        return
+
+    def run(self):
+        self.logger.debug("Waiting for threads to finish...") 
+        for t in self.read_threads:
+            self.logger.debug("Waiting for thread to finish: " + str(t.name)) 
+            t.join(60.0)
+            self.logger.debug("Thread finished: " + str(t.name)) 
+
+        self.logger.debug("All threads finished")
+
+        return
+
+    def cancel(self):
+        self.logger.debug("Cancelling running threads...")
+        for t in self.read_threads:
+            t.cancel()
+            self.logger.debug("Thread cancelled: " + str(t.name)) 
+
+        return
+
+class ReadNodeTask(Thread):
+    def __init__(self, node_addr, node_name, node_type, node_class, db_name="dryad_test_cache.db"):
+        Thread.__init__(self)
+        self.logger = logging.getLogger("main.cache_node.ReadNodeTask")
         self.node_addr = node_addr
         self.node_name = node_name
         self.node_type = node_type
         self.node_class = node_class
         self.node_readings = None
         self.node_errors = None
+        self.node_instance = None
+        self.node_read_event = None
+        self.db_name = db_name
 
         return
 
@@ -42,23 +72,43 @@ class ReadNodeTask(Thread):
     ## --------------------- ##
     def run(self):
         # Create the read completion notif event
-        read_event = Event()
+        self.node_read_event = Event()
         
         # Instantiate this node
-        node_inst = self.instantiate_node( self.node_addr,
-                                           self.node_name, 
-                                           self.node_type, 
-                                           self.node_class, 
-                                           read_event )
+        self.node_instance = self.instantiate_node( self.node_addr,
+                                                    self.node_name, 
+                                                    self.node_type, 
+                                                    self.node_class, 
+                                                    self.node_read_event )
 
-        if node_inst == None:
-            node.logger.error("Failed to instantiate node")
+        if self.node_instance == None:
+            self.logger.error("Failed to instantiate node")
             return False
 
         # Start collecting data from this node
-        self.node_readings = self.collect_node_data(node_inst, read_event)
+        self.node_readings = self.collect_node_data(self.node_instance, self.node_read_event)
 
-        print("READINGS>> " + str(self.get_readings()))
+        for reading in self.node_readings:
+            ts = 0
+            data = {}
+            for key, val in reading.items():
+                print(str(key) + " = " + str(val))
+                if key == 'ts':
+                    ts = val
+                else:
+                    data[key] = val
+
+            #print("{} : {} @ {}".format(str(data), self.node_name, ts))
+            
+            self.add_data(str(data), self.node_name, ts)
+
+        return
+
+    def cancel(self):
+        if self.node_instance == None:
+            return
+        
+        self.node_instance.stop()
 
         return
 
@@ -88,6 +138,21 @@ class ReadNodeTask(Thread):
         
         return node.get_readings()
 
+    # @desc     Add data
+    # @return   A boolean indicating success or failure
+    def add_data(self, data, source, timestamp):
+        ddb = DryadDatabase()
+        if ddb.connect(self.db_name) == False:
+            self.logger.error("Failed to connect to database")
+            return False
+
+        if ddb.add_data(data, source, timestamp) == False:
+            self.logger.error("Failed to add new data")
+            return False
+
+        ddb.disconnect()
+        return True
+
     # @desc     Retrieves the recently collected readings from this node
     # @return   A Numpy array of sensor readings
     def get_readings(self):
@@ -99,7 +164,7 @@ class CacheNode():
         self.node_list = []
         self.logger = logging.getLogger("main.cache_node.CacheNode")
         self.db_name = db_name
-        self.read_tasks = []
+        self.read_completion_task = None
 
         return
 
@@ -153,6 +218,11 @@ class CacheNode():
     # @params   queue - a non-null Queue object where completion tasks will be added
     # @return   A boolean indicating success or failure
     def collect_data(self, queue):
+        if not self.read_completion_task == None:
+            self.logger.error("Cannot start another collection task while another is still active")
+            return            
+
+        tasks = []
         for node in self.node_list:
             node_addr = node[ IDX_NODE_ADDR ]
             node_name = node[ IDX_NODE_NAME ]
@@ -180,18 +250,12 @@ class CacheNode():
             t = ReadNodeTask(node_addr, node_name, node_type, node_class)
             t.start()
 
-            self.read_tasks.append(t)
+            tasks.append(t)
 
             sleep(1.0)
         
-        # # Wait until all read tasks have been completed
-        # for t in tasks:
-        #     t.join(240.0)
-        #     self.logger.debug("{} completed".format(t.name))
-
-        #     print("READINGS>> " + str(t.get_readings()))
-
-        # self.logger.debug("Data Collection Finished")
+        self.read_completion_task = ReadCompletionWaitTask(self, tasks)
+        self.read_completion_task.start()
 
         return
 
@@ -200,9 +264,21 @@ class CacheNode():
     def get_le_node_list(self):
         return self.node_list
 
+    def cancel_read(self):
+        if (not self.read_completion_task == None):
+            self.logger.debug("Thread cancel requested")
+            self.read_completion_task.cancel()
+            self.read_completion_task.join(60.0)
+            self.read_completion_task = None
+            return
+
+        self.logger.debug("No threads to cancel")
+        return
+
     ## -------------------------------------- ##
     ## SEC03: Database Manipulation Functions ##
     ## -------------------------------------- ##
+
 
     # @desc     Sets up the database
     # @return   A boolean indicating success or failure
@@ -270,6 +346,5 @@ class CacheNode():
         ddb.disconnect()
 
         return True
-
 
 
