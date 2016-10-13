@@ -9,7 +9,7 @@ import dryad.custom_ble as ble
 
 from bluepy.btle import Scanner
 from threading import Thread, Event
-from time import sleep
+from time import sleep, time
 from dryad.database import DryadDatabase
 from dryad.bluno_ble import Bluno
 from dryad.parrot_ble import Parrot
@@ -32,6 +32,8 @@ class ReadNodeTask(Thread):
         self.node_name = node_name
         self.node_type = node_type
         self.node_class = node_class
+        self.node_readings = None
+        self.node_errors = None
 
         return
 
@@ -48,12 +50,13 @@ class ReadNodeTask(Thread):
                                            self.node_type, 
                                            self.node_class, 
                                            read_event )
+
         if node_inst == None:
             node.logger.error("Failed to instantiate node")
             return False
 
         # Start collecting data from this node
-        self.collect_node_data(node_inst, read_event)
+        self.node_readings = self.collect_node_data(node_inst, read_event)
 
         return
 
@@ -69,17 +72,24 @@ class ReadNodeTask(Thread):
 
         return None
 
+    # @desc     Collect node data from the individual sensing nodes
+    # @return   A Numpy array containing the readings
     def collect_node_data(self, node, event):
         # Start a read operation on the sensor node
-        node.set_read_sample_size(50)
-        node.start()
+        node.set_read_sample_size(10)
+        node.start(time_limit=time() + 65.0)
 
         event.wait(240.0)
         event.clear()
 
         node.stop()
+        
+        return node.get_readings()
 
-        return
+    # @desc     Retrieves the recently collected readings from this node
+    # @return   A Numpy array of sensor readings
+    def get_readings(self):
+        return self.node_readings
 
 class CacheNode():
 
@@ -109,14 +119,22 @@ class CacheNode():
 
         self.logger.info("Scanning for devices...")
         try:
-            scanned_devices = scanner.scan(25.0)
+            scanned_devices = scanner.scan(12.0)
         except Exception as e:
             self.logger.error("Scan Failed: " + str(e))
             return False
 
         self.logger.info("Scan finished.")
 
-        self.logger.debug("Scanned Devices = {}".format(scanned_devices))
+        scanned_str = "Scanned Devices: | "
+        for device in scanned_devices:
+            node_name = device.getValueText( ADTYPE_LOCAL_NAME )
+            if node_name == None:
+                continue
+
+            scanned_str +=  node_name + " | "
+
+        self.logger.debug(scanned_str)
 
         # Update the node list stored in our database
         if self.update_node_list(scanned_devices) == False:
@@ -168,6 +186,8 @@ class CacheNode():
         for t in tasks:
             t.join(240.0)
             self.logger.debug("{} completed".format(t.name))
+
+            print("READINGS>> " + str(t.get_readings()))
 
         self.logger.debug("Data Collection Finished")
 

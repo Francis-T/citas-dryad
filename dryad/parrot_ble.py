@@ -53,6 +53,7 @@ CONTROLS = {
 }
 
 MAX_CONN_RETRIES = 20
+MAX_SENSOR_READINGS = 250
 
 FLAG_NOTIF_ENABLE   = "\x01\x00"
 FLAG_NOTIF_DISABLE  = "\x00\x00"
@@ -61,14 +62,15 @@ DEBUG_RAW_DATA = True
 
 
 class ReadThread(Thread):
-    def __init__(self, pdevice, event, read_sample_size):
+    def __init__(self, pdevice, event, read_samples=0, read_until=0):
         Thread.__init__(self)
         self.pdevice = pdevice
         self.hevent = event
         self.logger = logging.getLogger("main.parrot_ble.ReadThread")
 
         self.readings = []
-        self.readings_left = read_sample_size
+        self.readings_left = read_samples
+        self.read_until = read_until
         return
 
     def run(self):
@@ -87,7 +89,7 @@ class ReadThread(Thread):
         # Setup the 'connection'
         self.pdevice.setup_conn()
 
-        while self.readings_left > 0:
+        while self.should_continue_read():
             # Retrieve the readings
             reading = self.pdevice.read_sensors(sensors=["SOIL_TEMP", "AIR_TEMP", "CAL_AIR_TEMP"])
             
@@ -107,6 +109,22 @@ class ReadThread(Thread):
 
         self.pdevice.stop()
 
+        return True
+
+    def should_continue_read(self):
+        # If the current time exceeds our read until value,
+        #   then return False immediately to stop reading
+        if (self.read_until > 0) and (time() > self.read_until):
+            self.logger.debug("Read time limit exceeded")
+            return False
+            
+        # Otherwise, check if the limit of readings has been
+        #   reached and return False to stop reading
+        if self.readings_left <= 0:
+            self.logger.debug("Read sample limit exceeded")
+            return False
+
+        # Allow reading to continue otherwise
         return True
 
     def get_readings(self):
@@ -187,9 +205,12 @@ class Parrot():
 
     # @desc     Starts a read operation on this sensor
     # @return   A boolean indicating success or failure
-    def start(self):
+    def start(self, time_limit=0):
         if self.read_thread == None:
-            self.read_thread = ReadThread(self, self.hevent, self.read_sample_size)
+            self.read_thread = ReadThread(self,
+                                          event=self.hevent,
+                                          read_samples=self.read_sample_size,
+                                          read_until=time_limit)
             self.read_thread.start()
 
         return True
@@ -256,7 +277,9 @@ class Parrot():
             if "BATTERY" in reading.keys():
                 reading["BATTERY"] = battery_level
         except Exception as err:
-            self.logger.exception(traceback.print_tb(err.__traceback__))
+            #self.logger.exception(traceback.print_tb(err.__traceback__))
+            self.logger.error("Exception occurrd: {}".format(str(err)))
+            return None
 
         self.switch_led(FLAG_NOTIF_ENABLE)
 
@@ -285,6 +308,7 @@ class Parrot():
                 except:
                     self.logger.error("Failed to read and decode sensor data: " + str(char))
 
+        reading['ts'] = int(time())
         self.switch_led(FLAG_NOTIF_DISABLE)
         
         return reading    

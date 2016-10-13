@@ -34,16 +34,16 @@ DFR_PWD_STR = str(bytearray(b"AT+PASSWOR=DFRobot\r\n"))
 DFR_BDR_STR = str(bytearray(b"AT+CURRUART=115200\r\n"))
 
 class PeripheralDelegate(DefaultDelegate):
-    def __init__(self, pdevice, serial_ch, event, read_sample_size):
+    def __init__(self, pdevice, serial_ch, event, read_samples, read_until):
         DefaultDelegate.__init__(self)
         self.pdevice = pdevice
         self.serial_ch = serial_ch
         self.hevent = event
         self.logger = logging.getLogger("main.bluno_ble.PeripheralDelegate")
 
-        self.readings_left = read_sample_size
         self.readings = np.array([])
-        #self.readings = []
+        self.readings_left = read_samples
+        self.read_until = read_until
 
         return
 
@@ -63,19 +63,36 @@ class PeripheralDelegate(DefaultDelegate):
 
             if "pH" in data:
                 self.readings = np.append( self.readings,
-                                           { "PH": data.split("=")[1].split(";")[0].strip() } )
+                                           { "PH": data.split("=")[1].split(";")[0].strip(),
+                                             "ts" : int(time()) } )
                 # self.readings = np.append( self.readings, float(data.split("=")[1].split(";")[0].strip()))
                 # self.logger.info( "[BLUNO] pH mean = {}".format( np.mean(self.readings) ))
 
                 # Decrease the number of readings
                 self.readings_left -= 1
 
-                # Once the desired number of readings are reached, trigger the
+                # Once the desired limit of readings are reached, trigger the
                 #   handle event to signal that the contents can now be taken
-                if (self.readings_left <= 0):
+                if (self.should_continue_read() == False):
                     self.hevent.set()
 
         return
+
+    def should_continue_read(self):
+        # If the current time exceeds our read until value,
+        #   then return False immediately to stop reading
+        if (self.read_until > 0) and (time() > self.read_until):
+            self.logger.debug("Read time limit exceeded")
+            return False
+            
+        # Otherwise, check if the limit of readings has been
+        #   reached and return False to stop reading
+        if self.readings_left <= 0:
+            self.logger.debug("Read sample limit exceeded")
+            return False
+
+        # Allow reading to continue otherwise
+        return True
 
     # @desc     Returns the collected sensor readings to the calling function
     # @return   A numpy array containing the collected readings
@@ -149,7 +166,7 @@ class Bluno():
 
     # @desc     Starts a read operation on this sensor
     # @return   A boolean indicating success or failure
-    def start(self):
+    def start(self, time_limit=0):
         # Ensure that we are connected
         if (self.is_connected == False):
             res = self.connect()
@@ -159,7 +176,11 @@ class Bluno():
         
         # Setup the BLE peripheral delegate
         serial_ch = self.get_serial()
-        self.pdelegate = PeripheralDelegate( self, serial_ch, self.hevent, self.read_sample_size )
+        self.pdelegate = PeripheralDelegate(self, 
+                                            serial_ch=serial_ch,
+                                            event=self.hevent,
+                                            read_samples=self.read_sample_size,
+                                            read_until=time_limit )
         self.pdevice.setDelegate( self.pdelegate )
         
         # TODO This shouldn't be here in the future since we expect the
