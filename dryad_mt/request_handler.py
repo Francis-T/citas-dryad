@@ -93,7 +93,7 @@ class RequestHandler():
         if limit == None:
             limit = 5
 
-        records = db.get_data(limit=limit, summarize=False)
+        records = db.get_data(limit=limit, summarize=True)
         while records != None:
             proc_ids = []
             resp_data = []
@@ -111,7 +111,7 @@ class RequestHandler():
             # Send our response
             try:
                 resp = json.dumps(resp_data)
-                # pp.pprint(resp_data)
+                pp.pprint(resp_data)
                 if link.send_response(resp) == False:
                     self.logger.error("Failed to send response")
                     db.disconnect()

@@ -114,7 +114,7 @@ class ReadNodeTask(Thread):
             # Add the origin part of the data
             # TODO Lat and Lon are still hardcoded
             data['origin'] = { "name" : self.node_name, 
-                               "lat" : 14.37,
+                               "lat" : 14.37,                               "lon" : 120.58,
                                "lon" : 120.58,
                                "addr" : self.node_addr }
 

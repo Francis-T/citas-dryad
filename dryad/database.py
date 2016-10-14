@@ -298,6 +298,19 @@ class DryadDatabase():
 
         return result[0][0]
 
+    # @desc     Gets the latest session ID
+    # @return   A boolean indicating success or failure
+    def get_latest_session(self):
+        query = "SELECT c_id FROM t_session ORDER BY c_id DESC LIMIT 1"
+        result = self.perform(query)
+        if result == True or result == False:
+            return None
+
+        if len(result) == 0:
+            return None
+
+        return result[0][0]
+
     # @desc     Retrieve data from the t_data_cache table in our database with the ff
     #           constraints on row return limit, row offset, and filter condition
     # @return   A boolean indicating success or failure
@@ -319,7 +332,6 @@ class DryadDatabase():
         else:
             query += " LIMIT %i OFFSET %i;" % (limit, offset)
 
-        print(query)
         cur = self.dbconn.cursor()
         result = None
         try:
@@ -338,9 +350,8 @@ class DryadDatabase():
 
         # Build our SELECT query 
         table_name = "t_data_cache AS td JOIN t_session AS ts ON td.c_session_id = ts.c_id"
-        #columns = "C_ID, C_ORIGIN, C_RETRIEVE_TIME, C_DATA"
-        columns = "0, C_ORIGIN, MAX(C_RETRIEVE_TIME), GROUP_CONCAT(c_content, ', ')"
-        grouping = "C_ORIGIN"
+        columns = "td.c_session_id, ' ', MAX(ts.c_end_time), GROUP_CONCAT(td.c_content,', '), ' '"
+        grouping = "td.c_session_id"
         query = "SELECT {} FROM {} WHERE {} GROUP BY {}".format(columns, table_name, cond, grouping)
 
         # Set our offset 
