@@ -18,7 +18,7 @@ class LinkListenerThread(Thread):
     def __init__(self, request_handler):
         self.SOCKET_TIMEOUT  = 5.0
         self.IDLE_TIMEOUT    = 120.0
-        self.RECEIVE_TIMEOUT = self.SOCKET_TIMEOUT * 1.5
+        self.RECEIVE_TIMEOUT = self.SOCKET_TIMEOUT * 5.0
         self.MAX_RECEIVE_LEN = 2048
         self.MSG_TERM = '\n'
         self.MSG_SEP = ','

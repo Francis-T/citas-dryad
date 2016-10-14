@@ -91,8 +91,7 @@ class RequestHandler():
             return False
 
         if limit == None:
-            limit = 20
-
+            limit = 5
 
         records = db.get_data(limit=limit, summarize=False)
         while records != None:

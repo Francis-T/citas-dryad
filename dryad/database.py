@@ -310,7 +310,6 @@ class DryadDatabase():
 
         # Build our SELECT query 
         table_name = "t_data_cache AS td JOIN t_session AS ts ON td.c_session_id = ts.c_id"
-        #columns = "C_ID, C_ORIGIN, C_RETRIEVE_TIME, C_DATA"
         columns = "td.c_id, td.c_source, ts.c_end_time, td.c_content, td.c_dest"
         query = "SELECT %s FROM %s WHERE %s" % (columns, table_name, cond)
 
