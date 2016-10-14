@@ -112,7 +112,7 @@ class RequestHandler():
             # Send our response
             try:
                 resp = json.dumps(resp_data)
-                pp.pprint(resp_data)
+                # pp.pprint(resp_data)
                 if link.send_response(resp) == False:
                     self.logger.error("Failed to send response")
                     db.disconnect()

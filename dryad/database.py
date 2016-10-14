@@ -9,7 +9,7 @@ import time
 import logging
 
 DEFAULT_DB_NAME = "dryad_cache.db"
-DEFAULT_GET_COND = "C_UPLOAD_TIME IS NULL"
+DEFAULT_GET_COND = "c_content IS NOT NULL"
 
 module_logger = logging.getLogger("main.database")
 
@@ -320,14 +320,15 @@ class DryadDatabase():
         else:
             query += " LIMIT %i OFFSET %i;" % (limit, offset)
 
+        print(query)
         cur = self.dbconn.cursor()
         result = None
         try:
             cur.execute(query)
             result = cur.fetchall()
-        except sqlite3.OperationalError:
-            #print("Failed to retrieve data")
-            return None
+        except sqlite3.OperationalError as e:
+            print( "Failed to retrieve data: " + str(e) )
+            return None 
 
         return result
 

@@ -169,7 +169,9 @@ class ReadNodeTask(Thread):
             self.logger.error("Failed to connect to database")
             return False
 
-        if ddb.add_data(content, source, timestamp) == False:
+        session_id = ddb.get_current_session()
+
+        if ddb.add_data(session_id, source, content, "ATENEO") == False:
             self.logger.error("Failed to add new data")
             return False
 
@@ -280,6 +282,8 @@ class CacheNode():
         # Set up and start the read completion monitoring task
         self.read_completion_task = ReadCompletionWaitTask(self, tasks)
         self.read_completion_task.start()
+        
+        self.start_session()
 
         return
 
@@ -305,11 +309,38 @@ class CacheNode():
     # @return   None
     def notify_read_completion(self):
         self.read_completion_task = None
+        self.end_session()
         return
 
     ## -------------------------------------- ##
     ## SEC03: Database Manipulation Functions ##
     ## -------------------------------------- ##
+
+    def start_session(self):
+        ddb = DryadDatabase()
+        if ddb.connect(self.db_name) == False:
+            self.logger.error("Failed to connect to database")
+            return False
+
+        if ddb.start_capture_session() == False:
+            self.logger.error("Failed to start capture session")
+            return False
+
+        ddb.disconnect()
+
+    def end_session(self):
+        ddb = DryadDatabase()
+        if ddb.connect(self.db_name) == False:
+            self.logger.error("Failed to connect to database")
+            return False
+
+        if ddb.end_capture_session() == False:
+            self.logger.error("Failed to end capture session")
+            return False
+
+        ddb.disconnect()
+        return True
+        return True
 
     # @desc     Sets up the database
     # @return   A boolean indicating success or failure
