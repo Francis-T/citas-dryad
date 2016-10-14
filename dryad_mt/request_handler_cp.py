@@ -115,9 +115,10 @@ class RequestHandler():
             return False
 
         if limit == None:
-            limit = 5
+            limit = 20
 
-        records = db.get_data(limit=limit, summarize=True)
+
+        records = db.get_data(limit=limit, summarize=False)
         while records != None:
             proc_ids = []
             resp_data = []

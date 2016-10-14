@@ -68,7 +68,7 @@ class LinkListenerThread(Thread):
         while (time.time() < recv_end_time) and (self.is_running):
             data_part = self.link.receive_data()
 
-            if not data_part == None:
+            if data_part is not None:
                 data_part = data_part.decode("utf-8")
 
             # If the data part contains nothing, then try to receive data
