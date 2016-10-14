@@ -22,7 +22,7 @@ from dryad_mt.link_listener import LinkListenerThread
 from dryad_mt.node_state import NodeState
 
 TRIG_EVENT_TIMEOUT = 120.0
-SAMPLING_INTERVAL = 60.0 * 12.0
+SAMPLING_INTERVAL = 60.0 * 2.0
 #SAMPLING_INTERVAL = 240.0
 MAX_TRIAL_COUNT = 10
 MAX_SAMPLE_COUNT = 100

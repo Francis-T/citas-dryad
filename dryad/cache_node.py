@@ -29,6 +29,7 @@ ADTYPE_LOCAL_NAME = 9
 class ReadCompletionWaitTask(Thread):
     def __init__(self, cnode, read_threads):
         Thread.__init__(self)
+        self.cnode = cnode
         self.read_threads = read_threads
         self.logger = logging.getLogger("main.cache_node.ReadCompletionWaitTask")
         return
@@ -41,6 +42,7 @@ class ReadCompletionWaitTask(Thread):
             self.logger.debug("Thread finished: " + str(t.name)) 
 
         self.logger.debug("All threads finished")
+        self.cnode.notify_read_completion()
 
         return
 
@@ -293,10 +295,16 @@ class CacheNode():
             self.logger.debug("Thread cancel requested")
             self.read_completion_task.cancel()
             self.read_completion_task.join(60.0)
-            self.read_completion_task = None
+            self.notify_read_completion()
             return
 
         self.logger.debug("No threads to cancel")
+        return
+
+    # @desc     Notifies the cache node of read completion
+    # @return   None
+    def notify_read_completion(self):
+        self.read_completion_task = None
         return
 
     ## -------------------------------------- ##
@@ -328,7 +336,11 @@ class CacheNode():
             return False
 
         # Setup the database if necessary
-        if ddb.update_node(addr, node_type=ntype, node_class=nclass) == False:
+        if ddb.update_node_device(node_name=addr, node_type=ntype) == False:
+            self.logger.error("Failed to update node type in database")
+            return False
+
+        if ddb.update_node(node_name=addr, node_class=nclass) == False:
             self.logger.error("Failed to update node type in database")
             return False
 
@@ -359,12 +371,13 @@ class CacheNode():
 
         for node in node_list:
             # If this device already exists, then skip it
-            if ddb.get_node_info(node.addr):
+            if ddb.get_node_device(node.addr):
                 continue
 
             node_name = node.getValueText( ADTYPE_LOCAL_NAME )
             if not node_name == None:
-                ddb.add_node_info(node.addr, node_name, "UNKNOWN")
+                ddb.add_node(node_name, "UNKNOWN")
+                ddb.add_node_device(node.addr, node_name, "UNKNOWN")
 
         ddb.disconnect()
 

@@ -285,7 +285,8 @@ class DryadDatabase():
     ##*************************************##
     ##  SEC03: Record Retrieval Functions  ##
     ##************************************ ##
-
+    # @desc     Gets the current session ID
+    # @return   A boolean indicating success or failure
     def get_current_session(self):
         query = "SELECT c_id FROM t_session WHERE c_end_time IS NULL"
         result = self.perform(query)
@@ -297,10 +298,9 @@ class DryadDatabase():
 
         return result[0][0]
 
-    """
-        Retrieve data from the t_data_cache table in our database with the ff
-        constraints on row return limit, row offset, and filter condition
-    """
+    # @desc     Retrieve data from the t_data_cache table in our database with the ff
+    #           constraints on row return limit, row offset, and filter condition
+    # @return   A boolean indicating success or failure
     def get_data(self, limit=0, offset=0, cond=DEFAULT_GET_COND, summarize=False):
         if not self.dbconn:
             return False
@@ -309,8 +309,9 @@ class DryadDatabase():
             return self.get_summarized_data(limit, offset, cond)
 
         # Build our SELECT query 
-        table_name = "t_data_cache"
-        columns = "C_ID, C_ORIGIN, C_RETRIEVE_TIME, C_DATA"
+        table_name = "t_data_cache AS td JOIN t_session AS ts ON td.c_session_id = ts.c_id"
+        #columns = "C_ID, C_ORIGIN, C_RETRIEVE_TIME, C_DATA"
+        columns = "td.c_id, td.c_source, ts.c_end_time, td.c_content, td.c_dest"
         query = "SELECT %s FROM %s WHERE %s" % (columns, table_name, cond)
 
         # Set our offset 
@@ -330,15 +331,15 @@ class DryadDatabase():
 
         return result
 
-
+    # TODO
     def get_summarized_data(self, limit=0, offset=0, cond=DEFAULT_GET_COND):
         if not self.dbconn:
             return False
 
         # Build our SELECT query 
-        table_name = "t_data_cache"
+        table_name = "t_data_cache AS td JOIN t_session AS ts ON td.c_session_id = ts.c_id"
         #columns = "C_ID, C_ORIGIN, C_RETRIEVE_TIME, C_DATA"
-        columns = "0, C_ORIGIN, MAX(C_RETRIEVE_TIME), GROUP_CONCAT(C_DATA, ', ')"
+        columns = "0, C_ORIGIN, MAX(C_RETRIEVE_TIME), GROUP_CONCAT(c_content, ', ')"
         grouping = "C_ORIGIN"
         query = "SELECT {} FROM {} WHERE {} GROUP BY {}".format(columns, table_name, cond, grouping)
 
@@ -360,17 +361,17 @@ class DryadDatabase():
         return result
 
         
-    """
-        Gets stored information on a particular node from the t_known_nodes table in
-        the database given a specific node id (e.g. a MAC address)
-    """
-    def get_node_info(self, node_id):
+    # @desc     Gets stored information on a particular node from the t_known_nodes table in
+    #           database given a specific node id (e.g. a MAC address)
+    # @return   TODO
+    def get_node_device(self, device_addr):
         if not self.dbconn:
             return False
 
-        table_name = "t_known_nodes"
-        columns = "C_ID, C_NAME, C_TYPE, C_CLASS, C_LAT, C_LON, C_BATT, C_LAST_SCANNED"
-        condition = 'C_ID = "{}"'.format(node_id)
+        table_name = "t_node_device"
+        columns =   "c_addr, c_node_id, c_type, c_lat, c_lon, "
+        columns +=  "c_batt, c_last_scanned, c_last_comms "
+        condition = 'c_addr = "{}"'.format(device_addr)
 
         # Build our SELECT query 
         query = "SELECT %s FROM %s WHERE %s" % (columns, table_name, condition)
@@ -386,16 +387,16 @@ class DryadDatabase():
 
         return result
 
-    """
-        Gets a list of node ids with node names from the t_known_nodes table in the 
-        database given a condition
-    """
+    # @desc     Gets a list of node ids with node names from the t_known_nodes table in the 
+    #           database given a condition
+    # @return   
     def get_nodes(self, condition=None):
         if not self.dbconn:
             return False
 
-        table_name = "t_known_nodes"
-        columns = "C_ID, C_NAME, C_TYPE, C_CLASS"
+        table_name = "t_node AS tn JOIN t_node_device AS td ON tn.c_node_id = td.c_node_id"
+        columns =   "td.c_addr, td.c_node_id, td.c_type, td.c_lat, td.c_lon, td.c_batt, "
+        columns +=  "td.c_last_scanned, td.c_last_comms "
 
         # Build our SELECT query 
         query = "SELECT %s FROM %s WHERE %s" % (columns, table_name, condition)
@@ -432,21 +433,6 @@ class DryadDatabase():
         # And execute it using our database connection 
         return self.perform(query)
 
-    """
-        Adds a new node to the t_known_nodes table
-    """
-    def add_node_info(self, node_id, node_name, node_type):
-        if not self.dbconn:
-            return False
-
-        table_name = "t_known_nodes"
-        columns = "C_ID, C_NAME, C_TYPE, C_LAST_SCANNED"
-
-        # Build our INSERT query
-        query = "INSERT INTO {} ({}) VALUES (?, ?, ?, ?);".format(table_name, columns)
-
-        return self.perform(query, (node_id, node_name, node_type, int(time.time())))
-
     # @desc     Ends an ongoing sensor data capture session
     # @return   A boolean indicating success or failure
     def end_capture_session(self):
@@ -463,27 +449,29 @@ class DryadDatabase():
         # And execute it using our database connection 
         return self.perform(query)
 
+
+
     """
         Update node info in the t_knmown_nodes table given a record id
     """
-    def update_node(self, node_id, node_name=None, node_type=None, node_class=None, lat=None, lon=None, batt=None, scan=None):
+    def update_node_device(self, node_name=None, node_addr=None, node_type=None, lat=None, lon=None, batt=None, scan=None, comms=None):
         if not self.dbconn:
             return False
 
         # Map function arguments to column update templates
         update_map = [
-            ( 'C_NAME = "{}"',       node_name ),
-            ( 'C_TYPE = "{}"',       node_type ),
-            ( 'C_CLASS = "{}"',      node_class ),
-            ( 'C_LAT = {}',          lat ),
-            ( 'C_LON = {}',          lon ),
-            ( 'C_BATT = {}',         batt ),
-            ( 'C_LAST_SCANNED = {}', scan ),
+            ( 'c_addr = "{}"',       node_addr ),
+            ( 'c_type = "{}"',       node_type ),
+            ( 'c_lat = {}',          lat ),
+            ( 'c_lon = {}',          lon ),
+            ( 'c_batt = {}',         batt ),
+            ( 'c_last_scanned = {}', scan ),
+            ( 'c_last_comms = {}',   comms ),
         ]
         is_first = True
 
         # Define the parts of our UPDATE query 
-        table_name = "t_known_nodes"
+        table_name = "t_node_device"
         update = ""
         for template, value in update_map:
             if not value == None:
@@ -494,11 +482,42 @@ class DryadDatabase():
                 
                 update += template.format(value)
         
-        condition = 'C_ID = "{}"'.format(node_id)
+        condition = 'c_node_id = "{}"'.format(node_name)
 
         # Build our UPDATE query 
         query = "UPDATE {} SET {} WHERE {}".format(table_name, update, condition)
 
         # And execute it using our database connection 
         return self.perform(query)
+
+    def update_node(self, node_name=None, node_class=None):
+        if not self.dbconn:
+            return False
+
+        # Map function arguments to column update templates
+        update_map = [
+            ( 'c_class = "{}"',      node_class ),
+        ]
+        is_first = True
+
+        # Define the parts of our UPDATE query 
+        table_name = "t_node"
+        update = ""
+        for template, value in update_map:
+            if not value == None:
+                if not is_first:
+                    update += ", "
+                else:
+                    is_first = False
+                
+                update += template.format(value)
+        
+        condition = 'c_node_id = "{}"'.format(node_name)
+
+        # Build our UPDATE query 
+        query = "UPDATE {} SET {} WHERE {}".format(table_name, update, condition)
+
+        # And execute it using our database connection 
+        return self.perform(query)
+
 

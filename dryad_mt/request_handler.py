@@ -124,8 +124,8 @@ class RequestHandler():
             
             # Once data is sent successfully, we can mark off the records whose
             #   IDs we took note of earlier in our database
-            for rec_id in proc_ids:
-                db.set_data_uploaded(rec_id)
+            #for rec_id in proc_ids:
+            #    db.set_data_uploaded(rec_id)
 
             # Get a new batch of unsent records
             records = db.get_data(50)
