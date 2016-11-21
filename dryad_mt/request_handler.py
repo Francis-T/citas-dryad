@@ -6,7 +6,7 @@
 import logging
 import json
 
-from Queue import Queue
+from queue import Queue
 from threading import Event
 
 from dryad.database import DryadDatabase

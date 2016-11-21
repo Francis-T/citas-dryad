@@ -7,7 +7,7 @@
 import logging
 import time
 
-from Queue import Queue
+from queue import Queue
 from threading import Thread, Event
 
 from dryad.mobile_bt import MobileNode

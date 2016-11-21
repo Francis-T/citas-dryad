@@ -20,8 +20,8 @@ echo "Enabling bluetooth service"
 sudo systemctl enable bluetooth
 
 # adding --experimental in /lib/systemd/system/bluetooth.service ExecStart for ble
-ExecStart=/usr/lib/bluetooth/bluetoothd -C
-ExecStartPost=/usr/bin/sdptool add SP
+#ExecStart=/usr/lib/bluetooth/bluetoothd -C
+#ExecStartPost=/usr/bin/sdptool add SP
 
 echo "Configuring bluetooth service for ble"
 sudo sed -i -e 's/bluetooth\/bluetoothd/bluetooth\/bluetoothd -C \nExecStartPost=/usr/bin/sdptool add SP' /lib/systemd/system/bluetooth.service
@@ -41,7 +41,7 @@ sudo apt-get install sqlite3
 
 # creation and activation of virtual environment with default python interpreter of python3.4
 sudo pip install virtualenv
-virtualenv -p /usr/bin/python2 venv
+virtualenv -p /usr/bin/python3 venv
 . venv/bin/activate
 
 # installation of required python modules
