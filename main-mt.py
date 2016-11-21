@@ -7,7 +7,7 @@
 import logging
 import time
 
-from Queue import Queue
+from queue import Queue
 from threading import Thread, Event, Timer
 
 from dryad import custom_ble as ble

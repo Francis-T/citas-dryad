@@ -12,7 +12,7 @@ echo "Running program..."
 for i in {0..1};
 do
     echo "Iteration $i started."
-    sudo venv/bin/python main-mt.py;
+    sudo python3 main-mt.py;
     echo "Iteration $1 finished."
 done;
 echo "Program finished. "
