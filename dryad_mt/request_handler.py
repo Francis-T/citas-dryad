@@ -5,6 +5,7 @@
 """
 import logging
 import json
+import pprint as pp
 
 from queue import Queue
 from threading import Event
@@ -92,7 +93,7 @@ class RequestHandler():
         if limit == None:
             limit = 20
 
-        records = db.get_data(limit=limit)
+        records = db.get_compressed_data(limit=limit)
         while records != None:
             proc_ids = []
             resp_data = []
@@ -100,15 +101,17 @@ class RequestHandler():
             # Compose our response content
             for rec in records:
                 proc_ids.append( rec[0] )
+
                 resp_data.append( {
-                    "timestamp" : rec[2],
-                    "source" : rec[1],
-                    "data" : json.loads(rec[3])
+                    "timestamp" : rec[1],
+                    "sampling_site" : "Ateneo",
+                    "data" : json.loads("[" + rec[2] + "]")
                 } )
             
             # Send our response
             try:
                 resp = json.dumps(resp_data)
+                pp.pprint(resp_data)
                 if link.send_response(resp) == False:
                     self.logger.error("Failed to send response")
                     db.disconnect()

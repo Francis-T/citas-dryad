@@ -7,6 +7,7 @@
 import logging
 import dryad.custom_ble as ble
 
+from json import dumps
 from bluepy.btle import Scanner
 from threading import Thread, Event
 from time import sleep, time
@@ -45,8 +46,13 @@ class ReadCompletionWaitTask(Thread):
 
     def cancel(self):
         self.logger.debug("Cancelling running threads...")
-        for t in self.read_threads:
-            t.cancel()
+        for rt in self.read_threads:
+            # Skip already-dead threads
+            if rt.is_alive() == False:
+                continue
+
+            # Send a cancel request to this thread
+            rt.cancel()
             self.logger.debug("Thread cancelled: " + str(t.name)) 
 
         return
@@ -80,7 +86,6 @@ class ReadNodeTask(Thread):
                                                     self.node_type, 
                                                     self.node_class, 
                                                     self.node_read_event )
-
         if self.node_instance == None:
             self.logger.error("Failed to instantiate node")
             return False
@@ -88,19 +93,35 @@ class ReadNodeTask(Thread):
         # Start collecting data from this node
         self.node_readings = self.collect_node_data(self.node_instance, self.node_read_event)
 
+        # Operate on each sensor node reading returned by the sensor
         for reading in self.node_readings:
-            ts = 0
+            read_time = 0
             data = {}
-            for key, val in reading.items():
-                print(str(key) + " = " + str(val))
-                if key == 'ts':
-                    ts = val
-                else:
-                    data[key] = val
 
-            #print("{} : {} @ {}".format(str(data), self.node_name, ts))
-            
-            self.add_data(str(data), self.node_name, ts)
+            # Parse the contents of this sensor node reading
+            for key, val in reading.items():
+                # Save the timestamp value to a separate variable
+                if key == 'ts':
+                    read_time = val
+                    continue
+
+                # Save the other values into a dict with the appropriate key
+                #   e.g. data['key'] = "pH", data['val'] = 7.0
+                data[key] = val
+
+            # Add the origin part of the data
+            # TODO Lat and Lon are still hardcoded
+            data['origin'] = { "name" : self.node_name, 
+                               "lat" : 14.37,
+                               "lon" : 120.58,
+                               "addr" : self.node_addr }
+
+            # Add data to the local data cache
+            #   Note: We might need _data_ to be a JSON-fmted string,
+            #         so we use json.dumps() on data[]
+            self.add_data(content=dumps(data), 
+                          source=self.node_name, 
+                          timestamp=read_time)
 
         return
 
@@ -138,15 +159,15 @@ class ReadNodeTask(Thread):
         
         return node.get_readings()
 
-    # @desc     Add data
+    # @desc     Adds new sensor data to the local data cache
     # @return   A boolean indicating success or failure
-    def add_data(self, data, source, timestamp):
+    def add_data(self, content, source, timestamp):
         ddb = DryadDatabase()
         if ddb.connect(self.db_name) == False:
             self.logger.error("Failed to connect to database")
             return False
 
-        if ddb.add_data(data, source, timestamp) == False:
+        if ddb.add_data(content, source, timestamp) == False:
             self.logger.error("Failed to add new data")
             return False
 
@@ -254,6 +275,7 @@ class CacheNode():
 
             sleep(1.0)
         
+        # Set up and start the read completion monitoring task
         self.read_completion_task = ReadCompletionWaitTask(self, tasks)
         self.read_completion_task.start()
 
@@ -264,6 +286,8 @@ class CacheNode():
     def get_le_node_list(self):
         return self.node_list
 
+    # @desc     Cancels ongoing sensor read tasks
+    # @return   None
     def cancel_read(self):
         if (not self.read_completion_task == None):
             self.logger.debug("Thread cancel requested")
@@ -278,7 +302,6 @@ class CacheNode():
     ## -------------------------------------- ##
     ## SEC03: Database Manipulation Functions ##
     ## -------------------------------------- ##
-
 
     # @desc     Sets up the database
     # @return   A boolean indicating success or failure

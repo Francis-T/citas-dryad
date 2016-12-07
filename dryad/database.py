@@ -178,6 +178,36 @@ class DryadDatabase():
 
         return result
 
+
+    def get_compressed_data(self, limit=0, offset=0, cond=DEFAULT_GET_COND):
+        if not self.dbconn:
+            return False
+
+        # Build our SELECT query 
+        table_name = "t_data_cache"
+        #columns = "C_ID, C_ORIGIN, C_RETRIEVE_TIME, C_DATA"
+        columns = "C_ORIGIN, MAX(C_RETRIEVE_TIME), GROUP_CONCAT(C_DATA, ', ')"
+        grouping = "C_ORIGIN"
+        query = "SELECT {} FROM {} WHERE {} GROUP BY {}".format(columns, table_name, cond, grouping)
+
+        # Set our offset 
+        if limit == 0:
+            query += ";"
+        else:
+            query += " LIMIT %i OFFSET %i;" % (limit, offset)
+
+        cur = self.dbconn.cursor()
+        result = None
+        try:
+            cur.execute(query)
+            result = cur.fetchall()
+        except sqlite3.OperationalError:
+            #print("Failed to retrieve data")
+            return None
+
+        return result
+
+
     """
         Flag data in the t_data_cache table as uploaded given a record id
     """
@@ -300,19 +330,17 @@ class DryadDatabase():
         # And execute it using our database connection 
         return self.perform(query)
 
-    """
-        Disconnect from the database
-    """
+    # @desc     Disconnects from the database
+    # @return   None
     def disconnect(self):
         if self.dbconn == None:
             return
         self.dbconn.close()
+        return
 
-    """
-        Execute the query using the provided database connection
-    """
+    # @desc     Executes the query using the provided database connection
+    # @return   A boolean indicating success or failure
     def perform(self, query, extras=None):
-        print("Query {" + query + "}")
         try:
             if extras == None:
                 self.dbconn.execute(query)
