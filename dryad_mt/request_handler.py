@@ -93,7 +93,8 @@ class RequestHandler():
         if limit == None:
             limit = 20
 
-        records = db.get_compressed_data(limit=limit)
+
+        records = db.get_data(limit=limit, summarize=False)
         while records != None:
             proc_ids = []
             resp_data = []
@@ -103,9 +104,9 @@ class RequestHandler():
                 proc_ids.append( rec[0] )
 
                 resp_data.append( {
-                    "timestamp" : rec[1],
-                    "sampling_site" : "Ateneo",
-                    "data" : json.loads("[" + rec[2] + "]")
+                    "data" : json.loads("[" + rec[3] + "]"),
+                    "timestamp" : rec[2],
+                    "sampling_site" : "Ateneo"
                 } )
             
             # Send our response

@@ -26,20 +26,53 @@ class DryadDatabase():
         self.dbconn = sqlite3.connect(db_name)
         return self.dbconn
 
-    """
-        Sets up the data cache table
-    """
-    def setup_data_table(self):
+    # @desc     Disconnects from the database
+    # @return   None
+    def disconnect(self):
+        if self.dbconn == None:
+            return
+        self.dbconn.close()
+        return
+
+    # @desc     Executes the query using the provided database connection
+    # @return   A boolean indicating success or failure
+    def perform(self, query, extras=None):
+        result = False
+        try:
+            if extras == None:
+                result = self.dbconn.execute(query)
+            else:
+                result = self.dbconn.execute(query, extras)
+
+            self.dbconn.commit()
+        except sqlite3.OperationalError:           
+            self.logger.exception("Query Failed (Operational Error): {}".format(query))
+            return False
+
+        except sqlite3.IntegrityError:
+            self.logger.exception("Query Failed (Integrity Error): {}".format(query))
+            return False
+
+        if not result == True and not result == False:
+            return result.fetchall()
+
+        return True
+
+    ##********************************##
+    ##  SEC01: Table Setup Functions  ##
+    ##******************************* ##
+    # @desc     Setup the capture session table to track individual
+    #           sensor read sessions
+    # @return   A boolean indicating success or failure
+    def setup_sessions_table(self):
         # Identify our target table 
-        table_name = "t_data_cache"
+        table_name = "t_session"
 
         # Build up our columns 
         columns = ""
-        columns += "C_ID            INTEGER PRIMARY KEY, "
-        columns += "C_RETRIEVE_TIME LONG, "
-        columns += "C_ORIGIN        VARCHAR, "
-        columns += "C_DATA          VARCHAR, "
-        columns += "C_UPLOAD_TIME   LONG "
+        columns += "c_id            INTEGER PRIMARY KEY, "
+        columns += "c_start_time    LONG, "
+        columns += "c_end_time      LONG "
 
         # Finally, build our query 
         query = "CREATE TABLE {} ({});".format(table_name, columns)
@@ -47,41 +80,81 @@ class DryadDatabase():
         # Debug Note: This is where you can opt to print out your query 
 
         # And execute it using our database connection 
-        if not self.perform(query):
-            return False
+        return self.perform(query)
 
-        return True
 
-    """
-        Sets up the known nodes table
-    """
-    def setup_known_nodes_table(self):
+    # @desc     Setup the sensor data cache table
+    # @return   A boolean indicating success or failure
+    def setup_data_cache_table(self):
+        # Identify our target table 
+        table_name = "t_data_cache"
+
+        # Build up our columns 
+        columns = ""
+        columns += "c_id            INTEGER PRIMARY KEY, "
+        columns += "c_session_id    INTEGER, "
+        columns += "c_source        VARCHAR, "
+        columns += "c_dest          VARCHAR, "
+        columns += "c_content       VARCHAR, "
+        columns += "FOREIGN KEY(c_session_id) "
+        columns += "    REFERENCES t_session(c_id), "
+        columns += "FOREIGN KEY(c_source) "
+        columns += "    REFERENCES t_node(c_node_id), "
+        columns += "FOREIGN KEY(c_dest) "
+        columns += "    REFERENCES t_node(c_node_id) "
+
+        # Finally, build our query 
+        query = "CREATE TABLE {} ({});".format(table_name, columns)
+
+        # Debug Note: This is where you can opt to print out your query 
+
+        # And execute it using our database connection 
+        return self.perform(query)
+
+    # @desc     Setup the node table
+    # @return   A boolean indicating success or failure
+    def setup_nodes_table(self):
         # Identify our target table
-        table_name = "t_known_nodes"
+        table_name = "t_node"
 
         # Build up our columns
         columns =  ""
-        columns += "C_ID            VARCHAR PRIMARY KEY, "
-        columns += "C_NAME          VARCHAR(50), "
-        columns += "C_TYPE          VARCHAR(50), "
-        columns += "C_CLASS         VARCHAR(50), "
-        columns += "C_LAT           FLOAT(8), "
-        columns += "C_LON           FLOAT(8), "
-        columns += "C_BATT          FLOAT(5), "
-        columns += "C_LAST_SCANNED  LONG "
+        columns += "c_node_id       VARCHAR(50) PRIMARY KEY, "
+        columns += "c_class         VARCHAR(50) "
 
         # Finally, build our query 
         query = "CREATE TABLE {} ({});".format(table_name, columns)
 
         # And execute it using our database connection 
-        if not self.perform(query):
-            return False
+        return self.perform(query)
 
-        return True
+    # @desc     Setup the node device table
+    # @return   A boolean indicating success or failure
+    def setup_node_devices_table(self):
+        # Identify our target table
+        table_name = "t_node_device"
 
-    """
-        Setup the database if it has not already been so
-    """
+        # Build up our columns
+        columns =  ""
+        columns += "c_addr          VARCHAR(17) PRIMARY KEY, "
+        columns += "c_node_id       VARCHAR(50), "
+        columns += "c_type          VARCHAR(50), "
+        columns += "c_lat           FLOAT(8), "
+        columns += "c_lon           FLOAT(8), "
+        columns += "c_batt          FLOAT(5), "
+        columns += "c_last_scanned  LONG, "
+        columns += "c_last_comms    LONG, "
+        columns += "FOREIGN KEY(c_node_id) "
+        columns += "    REFERENCES t_node(c_node_id) "
+
+        # Finally, build our query 
+        query = "CREATE TABLE {} ({});".format(table_name, columns)
+
+        # And execute it using our database connection 
+        return self.perform(query)
+
+    # @desc     Setup the entire database
+    # @return   A boolean indicating success or failure
     def setup(self):
         # Check if this database object is valid 
         if self.dbconn == None:
@@ -97,20 +170,27 @@ class DryadDatabase():
 
         self.logger.info("Setting up the database...")
 
-        if self.setup_data_table() == False:
-            self.logger.error("Database setup failed")
+        if self.setup_nodes_table() == False:
+            self.logger.error("Database setup failed: Nodes")
             return False
 
-        if self.setup_known_nodes_table() == False:
-            self.logger.error("Database setup failed")
+        if self.setup_sessions_table() == False:
+            self.logger.error("Database setup failed: Sessions")
+            return False
+
+        if self.setup_node_devices_table() == False:
+            self.logger.error("Database setup failed: Node Devices")
+            return False
+
+        if self.setup_data_cache_table() == False:
+            self.logger.error("Database setup failed: Data Cache")
             return False
 
         self.logger.info("Database setup succesful")
         return True
 
-    """
-        Check if the required tables are already in the database
-    """
+    # @desc     Check if the required tables are already present in the DB
+    # @return   A boolean indicating success or failure
     def check_tables(self):
         cur = self.dbconn.cursor()
         # Check if the tables we want are already represented in the database 
@@ -120,41 +200,113 @@ class DryadDatabase():
             return False
 
         try:
-            cur.execute("SELECT * FROM t_known_nodes")
+            cur.execute("SELECT * FROM t_node")
+        except sqlite3.OperationalError:
+            return False
+
+        try:
+            cur.execute("SELECT * FROM t_node_device")
+        except sqlite3.OperationalError:
+            return False
+
+        try:
+            cur.execute("SELECT * FROM t_session")
         except sqlite3.OperationalError:
             return False
 
         return True
 
-    """
-        Add data to the t_data_cache table
-    """
-    def add_data(self, data, source="UNKNOWN", timestamp=-1):
+    ##**********************************##
+    ##  SEC02: Record Insert Functions  ##
+    ##********************************* ##
+    # @desc     Adds new node information to the table
+    # @return   A boolean indicating success or failure
+    def add_node(self, node_name, node_class):
+        if not self.dbconn:
+            return False
+
+        table_name = "t_node"
+        columns = "c_node_id, c_class"
+        values = (node_name, node_class)
+
+        # Build our INSERT query 
+        query = "INSERT INTO {} ({}) VALUES (?, ?);".format(table_name, columns)
+
+        # And execute it using our database connection 
+        return self.perform(query, values)
+
+    # @desc     Adds new node device information to the table
+    # @return   A boolean indicating success or failure
+    def add_node_device(self, node_addr, node_name, node_type):
+        if not self.dbconn:
+            return False
+
+        table_name = "t_node_device"
+        columns = "c_addr, c_node_id, c_type"
+        values = (node_addr, node_name, node_type)
+
+        # Build our INSERT query 
+        query = "INSERT INTO {} ({}) VALUES (?, ?, ?);".format(table_name, columns)
+
+        # And execute it using our database connection 
+        return self.perform(query, values)
+
+    # @desc     Starts a new sensor data capture session
+    # @return   A boolean indicating success or failure
+    def start_capture_session(self):
+        if not self.dbconn:
+            return False
+
+        table_name = "t_session"
+        columns = "c_start_time"
+        values = str( int(time.time()) ) 
+
+        # Build our INSERT query 
+        query = "INSERT INTO {} ({}) VALUES ({});".format(table_name, columns, values)
+
+        # And execute it using our database connection 
+        return self.perform(query)
+
+    # @desc     Adds a new sensor data record to the table
+    # @return   A boolean indicating success or failure
+    def add_data(self, session_id, source, content, dest=""):
         if not self.dbconn:
             return False
 
         table_name = "t_data_cache"
-        columns = "C_RETRIEVE_TIME, C_ORIGIN, C_DATA"
-
-        # Define the values to be inserted 
-        if timestamp <= 0:
-            timestamp = int(time.time())
-
-        values = '%li, "%s", "%s"' % (timestamp, source, data)
+        columns = "c_session_id, c_source, c_dest, c_content"
 
         # Build our INSERT query 
-        query = "INSERT INTO %s (%s) VALUES (?, ?, ?);" % (table_name, columns)
+        query = "INSERT INTO %s (%s) VALUES (?, ?, ?, ?);" % (table_name, columns)
 
         # And execute it using our database connection 
-        return self.perform(query, (int(timestamp), source, data))
+        return self.perform(query, (session_id, source, dest, content))
+
+    ##*************************************##
+    ##  SEC03: Record Retrieval Functions  ##
+    ##************************************ ##
+
+    def get_current_session(self):
+        query = "SELECT c_id FROM t_session WHERE c_end_time IS NULL"
+        result = self.perform(query)
+        if result == True or result == False:
+            return None
+
+        if len(result) == 0:
+            return None
+
+        return result[0][0]
 
     """
         Retrieve data from the t_data_cache table in our database with the ff
         constraints on row return limit, row offset, and filter condition
     """
-    def get_data(self, limit=0, offset=0, cond=DEFAULT_GET_COND):
+    def get_data(self, limit=0, offset=0, cond=DEFAULT_GET_COND, summarize=False):
         if not self.dbconn:
             return False
+
+        if summarize == True:
+            return self.get_summarized_data(limit, offset, cond)
 
         # Build our SELECT query 
         table_name = "t_data_cache"
@@ -179,14 +331,14 @@ class DryadDatabase():
         return result
 
 
-    def get_compressed_data(self, limit=0, offset=0, cond=DEFAULT_GET_COND):
+    def get_summarized_data(self, limit=0, offset=0, cond=DEFAULT_GET_COND):
         if not self.dbconn:
             return False
 
         # Build our SELECT query 
         table_name = "t_data_cache"
         #columns = "C_ID, C_ORIGIN, C_RETRIEVE_TIME, C_DATA"
-        columns = "C_ORIGIN, MAX(C_RETRIEVE_TIME), GROUP_CONCAT(C_DATA, ', ')"
+        columns = "0, C_ORIGIN, MAX(C_RETRIEVE_TIME), GROUP_CONCAT(C_DATA, ', ')"
         grouping = "C_ORIGIN"
         query = "SELECT {} FROM {} WHERE {} GROUP BY {}".format(columns, table_name, cond, grouping)
 
@@ -207,39 +359,6 @@ class DryadDatabase():
 
         return result
 
-
-    """
-        Flag data in the t_data_cache table as uploaded given a record id
-    """
-    def set_data_uploaded(self, rec_id):
-        if not self.dbconn:
-            return False
-
-        # Define the parts of our UPDATE query 
-        table_name = "t_data_cache"
-        update = "C_UPLOAD_TIME = %li" % (int(time.time()))
-        condition = "C_ID = %i" % (rec_id)
-
-        # Build our UPDATE query 
-        query = "UPDATE %s SET %s WHERE %s" % (table_name, update, condition)
-
-        # And execute it using our database connection 
-        return self.perform(query)
-
-    """
-        Adds a new node to the t_known_nodes table
-    """
-    def add_node_info(self, node_id, node_name, node_type):
-        if not self.dbconn:
-            return False
-
-        table_name = "t_known_nodes"
-        columns = "C_ID, C_NAME, C_TYPE, C_LAST_SCANNED"
-
-        # Build our INSERT query
-        query = "INSERT INTO {} ({}) VALUES (?, ?, ?, ?);".format(table_name, columns)
-
-        return self.perform(query, (node_id, node_name, node_type, int(time.time())))
         
     """
         Gets stored information on a particular node from the t_known_nodes table in
@@ -291,6 +410,59 @@ class DryadDatabase():
             return None
         return result
 
+
+    ##**********************************##
+    ##  SEC04: Record Update Functions  ##
+    ##********************************* ##
+    """
+        Flag data in the t_data_cache table as uploaded given a record id
+    """
+    def set_data_uploaded(self, rec_id):
+        if not self.dbconn:
+            return False
+
+        # Define the parts of our UPDATE query 
+        table_name = "t_data_cache"
+        update = "C_UPLOAD_TIME = %li" % (int(time.time()))
+        condition = "C_ID = %i" % (rec_id)
+
+        # Build our UPDATE query 
+        query = "UPDATE %s SET %s WHERE %s" % (table_name, update, condition)
+
+        # And execute it using our database connection 
+        return self.perform(query)
+
+    """
+        Adds a new node to the t_known_nodes table
+    """
+    def add_node_info(self, node_id, node_name, node_type):
+        if not self.dbconn:
+            return False
+
+        table_name = "t_known_nodes"
+        columns = "C_ID, C_NAME, C_TYPE, C_LAST_SCANNED"
+
+        # Build our INSERT query
+        query = "INSERT INTO {} ({}) VALUES (?, ?, ?, ?);".format(table_name, columns)
+
+        return self.perform(query, (node_id, node_name, node_type, int(time.time())))
+
+    # @desc     Ends an ongoing sensor data capture session
+    # @return   A boolean indicating success or failure
+    def end_capture_session(self):
+        if not self.dbconn:
+            return False
+
+        table_name = "t_session"
+        update = "c_end_time = {}".format(int(time.time()))
+        condition = "c_end_time IS NULL"
+
+        # Build our INSERT query 
+        query = "UPDATE {} SET {} WHERE {};".format(table_name, update, condition)
+
+        # And execute it using our database connection 
+        return self.perform(query)
+
     """
         Update node info in the t_knmown_nodes table given a record id
     """
@@ -329,32 +501,4 @@ class DryadDatabase():
 
         # And execute it using our database connection 
         return self.perform(query)
-
-    # @desc     Disconnects from the database
-    # @return   None
-    def disconnect(self):
-        if self.dbconn == None:
-            return
-        self.dbconn.close()
-        return
-
-    # @desc     Executes the query using the provided database connection
-    # @return   A boolean indicating success or failure
-    def perform(self, query, extras=None):
-        try:
-            if extras == None:
-                self.dbconn.execute(query)
-            else:
-                self.dbconn.execute(query, extras)
-
-            self.dbconn.commit()
-        except sqlite3.OperationalError:           
-            self.logger.exception("Query Failed (Operational Error): {}".format(query))
-            return False
-
-        except sqlite3.IntegrityError:
-            self.logger.exception("Query Failed (Integrity Error): {}".format(query))
-            return False
-
-        return True
 
