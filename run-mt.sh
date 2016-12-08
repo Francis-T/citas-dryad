@@ -15,8 +15,9 @@ echo "Running program..."
 for i in {0..100};
 do
     echo "Iteration $i started."
-    sudo venv3/bin/python main-mt.py;
-    RES_CODE=$(echo $?)
+    #sudo venv3/bin/python main-mt.py;
+    sudo python3 main-mt.py
+	RES_CODE=$(echo $?)
     if [ $RES_CODE -ne 0 ];
     then
         break;

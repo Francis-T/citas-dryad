@@ -66,7 +66,9 @@ class LinkListenerThread(Thread):
         # Keep trying to receive data until we've reached the projected receive
         #   timeout time OR this thread is no longer running
         while (time.time() < recv_end_time) and (self.is_running):
-            data_part = self.link.receive_data().decode("utf-8")
+            data_part = self.link.receive_data()
+            if data_part is not None:
+                data_part = data_part.decode("utf-8")
 
             # If the data part contains nothing, then try to receive data
             #   again if the thread is still running

@@ -1,7 +1,7 @@
 """
-    Name: request_handler.py
-    Author: Francis T
-    Desc: Source code for the Cache Node request handler
+	Name: request_handler.py
+	Author: Francis T
+	Desc: Source code for the Cache Node request handler
 """
 import logging
 import json
@@ -24,8 +24,10 @@ class RequestHandler():
         return
 
     def handle_req_state(self, link, content):
-        state = self.nstate.get_state()
-        return link.send_response("RSTAT:" + state + ";\r\n")
+        #TODO Retrieve information from database
+		# state = self.nstate.get_state()
+		state = "{'state':'inactive','batt':'100','version':'1.0','lat':'10.12','lon':'122.11'}"
+		return link.send_response("RSTAT:" + state + ";\r\n")
 
     def handle_req_activate(self, link, content):
         # Add an activation request to the main cache node queue
@@ -44,6 +46,10 @@ class RequestHandler():
         self.hevent.set()
 
         return link.send_response("RDEAC:OK;\r\n")
+
+	def handle_req_cache_update(self, link, content):
+		#TODO Update content of database
+		return link.send_response("RCUPD:OK;\r\n")
 
     def handle_req_shutdown(self, link, content):
         # Add a deactivation request to the main cache node queue
@@ -170,7 +176,13 @@ class RequestHandler():
                 self.logger.error("Failed to handle {} request".format(req_hdr))
                 return False
 
-        elif req_hdr == "QPWDN":
+		elif req_hdr == "QCUPD":
+            # Update cache details
+            if self.handle_req_cache_update(link, req_content) == False:
+                self.logger.error("Failed to handle {} request".format(req_hdr))
+                return False
+
+		elif req_hdr == "QPWDN":
             # Shutdown Program request (undocumented feature)
             if self.handle_req_shutdown(link, req_content) == False:
                 self.logger.error("Failed to handle {} request".format(req_hdr))
@@ -183,4 +195,3 @@ class RequestHandler():
                 return False
 
         return True
-
