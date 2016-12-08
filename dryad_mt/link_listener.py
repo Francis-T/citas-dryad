@@ -18,7 +18,7 @@ class LinkListenerThread(Thread):
     def __init__(self, request_handler):
         self.SOCKET_TIMEOUT  = 5.0
         self.IDLE_TIMEOUT    = 120.0
-        self.RECEIVE_TIMEOUT = self.SOCKET_TIMEOUT * 1.5
+        self.RECEIVE_TIMEOUT = self.SOCKET_TIMEOUT * 5.0
         self.MAX_RECEIVE_LEN = 2048
         self.MSG_TERM = '\n'
         self.MSG_SEP = ','
@@ -67,6 +67,7 @@ class LinkListenerThread(Thread):
         #   timeout time OR this thread is no longer running
         while (time.time() < recv_end_time) and (self.is_running):
             data_part = self.link.receive_data()
+
             if data_part is not None:
                 data_part = data_part.decode("utf-8")
 
