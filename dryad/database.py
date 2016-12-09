@@ -237,16 +237,16 @@ class DryadDatabase():
 
     # @desc     Adds new node device information to the table
     # @return   A boolean indicating success or failure
-    def add_node_device(self, node_addr, node_name, node_type):
+    def add_node_device(self, node_addr, node_name, node_type, lat=None, lon=None):
         if not self.dbconn:
             return False
 
         table_name = "t_node_device"
-        columns = "c_addr, c_node_id, c_type"
-        values = (node_addr, node_name, node_type)
+        columns = "c_addr, c_node_id, c_type, c_lat, c_lon"
+        values = (node_addr, node_name, node_type, lat, lon)
 
         # Build our INSERT query 
-        query = "INSERT INTO {} ({}) VALUES (?, ?, ?);".format(table_name, columns)
+        query = "INSERT INTO {} ({}) VALUES (?, ?, ?, ?, ?);".format(table_name, columns)
 
         # And execute it using our database connection 
         return self.perform(query, values)
@@ -375,9 +375,9 @@ class DryadDatabase():
 
         return result
 
-	# @desc		Queries in the database the details of self - cache node
-	#
-	# @return	Returns the list of the results containing details
+    # @desc        Queries in the database the details of self - cache node
+    #
+    # @return    Returns the list of the results containing details
     def get_self_details(self):
         if not self.dbconn:
             return False
@@ -397,8 +397,43 @@ class DryadDatabase():
         except sqlite3.OperationalError:
             #print("Failed to retrieve data")
             return None
-
         return result[0]
+    
+    # @desc        Queries in the database the details of self - cache node
+    #
+    # @return    Returns the list of the results containing details
+    def update_self_details(self, node_name=None, lat=None, lon=None):
+        if not self.dbconn:
+            return False
+        
+        
+        update_map = [
+            ( 'c_node_id = "{}"',    node_name ),
+            ( 'c_lat = {}',        lat ),
+            ( 'c_lon = {}',        lon ),
+        ]
+
+        is_first = True
+       
+        table_name = "t_node_device"
+        
+        update = ""
+        for template, value in update_map:
+            if not value == None:
+                if not is_first: 
+                    update += ", "
+                else:
+                    is_first = False
+            
+            update += template.format(value)
+
+        condition = 'c_type = "SELF"'
+
+        # Build our SELECT query 
+        query = "UPDATE {} SET {} WHERE {}".format(table_name, update,condition)
+
+        print(query)
+        return self.perform(query)
 
     
     # @desc     Gets stored information on a particular node from the t_known_nodes table in

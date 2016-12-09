@@ -13,6 +13,10 @@ from threading import Event
 from dryad.database import DryadDatabase
 from dryad_mt.node_state import NodeState
 
+CLASS_SENSOR = "SENSOR"
+
+TYPE_PARROT = "PARROT"
+TYPE_BLUNO = "BLUNO"
 class RequestHandler():
     def __init__(self, event, queue, state, db_name, version):
         self.hevent = event
@@ -29,14 +33,14 @@ class RequestHandler():
         if db.connect(self.dbname) == False:
             return False
     
-		# Retrive details about the cache node from the database
+        # Retrive details about the cache node from the database
         details = db.get_self_details()    
 
-		# Format the string to return
+        # Format the string to return
         state = "'state':'{}','batt':{},'version':'{}','lat':{},'lon':{}"
-		state = state.format(self.nstate.get_state(), details[3], self.version, details[1], details[2])
+        state = state.format(self.nstate.get_state(), details[3], self.version, details[1], details[2])
         
-		return link.send_response("RSTAT:{" + state + "};\r\n")
+        return link.send_response("RSTAT:{" + state + "};\r\n")
 
     def handle_req_activate(self, link, content):
         # Add an activation request to the main cache node queue
@@ -57,18 +61,88 @@ class RequestHandler():
         return link.send_response("RDEAC:OK;\r\n")
 
     def handle_req_update_cache(self, link, content):
-        # TODO Update content of database
+        params = {"name":None, "lat":None, "lon":None}
+
+        # remove trailing ";" 
+        if ";" in content:
+            content = content[:-1]
+
+        update_args = content.split(',')
         
-		return link.send_response("RCUPD:OK;\r\n")
+        if len(update_args) > 0:
+            for arg in update_args:
+                if "=" in arg:
+                    param = arg.split("=")[0]
+                    val = arg.split("=")[1]
+                    try:
+                        val = float(val)
+                    except:
+                        pass
+                    if param in params.keys():
+                        params[param] = val     
+        db = DryadDatabase()
+        if db.connect(self.dbname) == False:
+            return False
+
+        db.update_self_details(params["name"], params["lat"], params["lon"])
+        return link.send_response("RCUPD:OK;\r\n")
 
     def handle_req_list_sensors(self, link, content):
-        # TODO Retrieve sensor data from database
-        sensors = "{'sensor_id': [{'id': 'xx-123', 'name': 'sn1', 'state': 'pending deployment', 'date_updated': '12-10-94', 'site_name': 'Maribulan', 'lat': '10.12', 'lon': '123.12', 'pf_batt': '98', 'bl_batt': '80'}, {'id': 'xx-124', 'name': 'sn2', 'state': 'deployed', 'date_updated': '12-10-95', 'site_name': 'Maribulan', 'lat': '10.12', 'lon': '125.12', 'pf_batt': '70', 'bl_batt': '80'}]}"
+        # TODO Retrieve sensors list from db
+        db = DryadDatabase()
+        if db.connect(self.dbname) == False:
+            return False
+        sensors = db.get_nodes()
 
+        if sensors is None:
+            sensors = ""
+
+        
+        #sensors = "{'sensor_id': [{'id': 'xx-123', 'name': 'sn1', 'state': 'pending deployment', 'date_updated': '12-10-94', 'site_name': 'Maribulan', 'lat': '10.12', 'lon': '123.12', 'pf_batt': '98', 'bl_batt': '80'}, {'id': 'xx-124', 'name': 'sn2', 'state': 'deployed', 'date_updated': '12-10-95', 'site_name': 'Maribulan', 'lat': '10.12', 'lon': '125.12', 'pf_batt': '70', 'bl_batt': '80'}]}"
+        
+        print(db.get_nodes())
         return link.send_response("RNLST:" + sensors + ";\r\n")
    
     def handle_req_setup_sensor(self, link, content):
         # TODO Add new sensor node settings
+        params = {
+            "name"        : None, 
+            "pf_addr"    : None, 
+            "bl_addr"    : None,
+            "state"        : None,
+            "lat"        : None,
+            "lon"        : None, 
+            "updated"    : None,
+        }
+
+        # remove trailing ";" 
+        if ";" in content:
+            content = content[:-1]
+        else:
+            return False # Incomplete content
+
+        update_args = content.split(',')
+        
+        if len(update_args) > 0:
+            for arg in update_args:
+                if "=" in arg:
+                    param = arg.split("=")[0]
+                    val = arg.split("=")[1]
+                    try:
+                        val = float(val)
+                    except:
+                        pass
+                    if param in params.keys():
+                        params[param] = val     
+        db = DryadDatabase()
+        if db.connect(self.dbname) == False:
+            return False
+
+        # TODO Ask if we can have lat lon placed in node rather than node_device
+        db.add_node(node_name=params["name"], node_class=CLASS_SENSOR)
+        db.add_node_device(node_addr=params["bl_addr"], node_name=params["name"], node_type=TYPE_BLUNO, lat=params["lat"], lon=params["lon"])
+        db.add_node_device(node_addr=params["pf_addr"], node_name=params["name"], node_type=TYPE_PARROT, lat=params["lat"], lon=params["lon"])
+        
         return link.send_response("RQRSN:OK;\r\n")
 
     def handle_req_update_sensor(self, link, content):
