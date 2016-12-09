@@ -76,7 +76,7 @@ class RequestHandler():
         # And trigger the event handler
         self.hevent.set()
 
-        return True
+        return link.send_response("RPWDN:OK;\r\n")
         
     def handle_req_download(self, link, content):
         limit = None
