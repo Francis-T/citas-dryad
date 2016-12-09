@@ -348,10 +348,13 @@ class DryadDatabase():
         if not self.dbconn:
             return False
 
+        last_session_id = self.get_latest_session()
+
         # Build our SELECT query 
         table_name = "t_data_cache AS td JOIN t_session AS ts ON td.c_session_id = ts.c_id"
         columns = "td.c_session_id, ' ', MAX(ts.c_end_time), GROUP_CONCAT(td.c_content,', '), ' '"
         grouping = "td.c_session_id"
+        cond = "td.c_session_id = (SELECT MAX(td1.c_session_id) FROM t_data_cache AS td1)"
         query = "SELECT {} FROM {} WHERE {} GROUP BY {}".format(columns, table_name, cond, grouping)
 
         # Set our offset 
@@ -363,10 +366,11 @@ class DryadDatabase():
         cur = self.dbconn.cursor()
         result = None
         try:
+            print(query)
             cur.execute(query)
             result = cur.fetchall()
-        except sqlite3.OperationalError:
-            #print("Failed to retrieve data")
+        except sqlite3.OperationalError as e:
+            print( "Failed to retrieve data: " + str(e) )
             return None
 
         return result

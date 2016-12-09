@@ -75,7 +75,8 @@ class MobileNode():
         print("Sending response...")
         try:
             self.client_sock.send(resp_data)
-        except BluetoothError:
+        except BluetoothError as e:
+            print("Send failed: {}".format(str(e)))
             self.connected = False
             return False
 
