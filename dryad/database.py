@@ -375,9 +375,9 @@ class DryadDatabase():
 
         return result
 
-	# @desc
+	# @desc		Queries in the database the details of self - cache node
 	#
-	# @return
+	# @return	Returns the list of the results containing details
     def get_self_details(self):
         if not self.dbconn:
             return False

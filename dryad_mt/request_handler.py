@@ -14,20 +14,29 @@ from dryad.database import DryadDatabase
 from dryad_mt.node_state import NodeState
 
 class RequestHandler():
-    def __init__(self, event, queue, state, db_name):
+    def __init__(self, event, queue, state, db_name, version):
         self.hevent = event
         self.queue = queue
         self.nstate = state
         self.dbname = db_name
+        self.version = version
         
         self.logger = logging.getLogger("main.RequestHandler")
         return
 
     def handle_req_state(self, link, content):
-        #TODO Retrieve information from database
-        # state = self.nstate.get_state()
-        state = "{'state':'inactive','batt':'100','version':'1.0','lat':'10.12','lon':'122.11'}"
-        return link.send_response("RSTAT:" + state + ";\r\n")
+        db = DryadDatabase()
+        if db.connect(self.dbname) == False:
+            return False
+    
+		# Retrive details about the cache node from the database
+        details = db.get_self_details()    
+
+		# Format the string to return
+        state = "'state':'{}','batt':{},'version':'{}','lat':{},'lon':{}"
+		state = state.format(self.nstate.get_state(), details[3], self.version, details[1], details[2])
+        
+		return link.send_response("RSTAT:{" + state + "};\r\n")
 
     def handle_req_activate(self, link, content):
         # Add an activation request to the main cache node queue
@@ -49,7 +58,8 @@ class RequestHandler():
 
     def handle_req_update_cache(self, link, content):
         # TODO Update content of database
-        return link.send_response("RCUPD:OK;\r\n")
+        
+		return link.send_response("RCUPD:OK;\r\n")
 
     def handle_req_list_sensors(self, link, content):
         # TODO Retrieve sensor data from database
