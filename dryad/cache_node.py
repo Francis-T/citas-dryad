@@ -6,6 +6,7 @@
 """
 import logging
 import dryad.custom_ble as ble
+import os
 
 from json import dumps
 from bluepy.btle import Scanner
@@ -25,6 +26,9 @@ NTYPE_UNUSED    = "UNUSED"
 NTYPE_SENSOR    = "SENSOR"
 
 ADTYPE_LOCAL_NAME = 9
+
+SYS_CMD_BNAME = "hciconfig hci0 name | grep \"Name\" | sed -r \"s/\s+Name: '(.+)'/\\1/g\""
+SYS_CMD_ADDR = "hciconfig hci0 name | grep \"BD Address\" | sed -r \"s/\s+BD Address: (.+)  ACL.+/\\1/g\"" 
 
 class ReadCompletionWaitTask(Thread):
     def __init__(self, cnode, read_threads):
@@ -354,6 +358,12 @@ class CacheNode():
         if ddb.setup() == False:
             self.logger.error("Failed to setup database")
             return False
+
+        self_name = os.popen(SYS_CMD_BNAME).read().strip()
+        self_address = os.popen(SYS_CMD_ADDR).read().strip()
+
+        ddb.add_node(node_name=self_name, node_class="CACHE")
+        ddb.add_node_device(node_addr=self_address, node_name = self_name, node_type = "SELF")
 
         ddb.disconnect()
         return True

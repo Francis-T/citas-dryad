@@ -38,7 +38,7 @@ class NodeState():
         self.state_lock.acquire()
         state = self.state
         self.state_lock.release()
-        return state
+        return str(state)
 
 
 

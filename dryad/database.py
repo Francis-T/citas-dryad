@@ -375,7 +375,32 @@ class DryadDatabase():
 
         return result
 
-        
+	# @desc
+	#
+	# @return
+    def get_self_details(self):
+        if not self.dbconn:
+            return False
+
+        table_name = "t_node_device"
+        columns =   "c_node_id, c_lat, c_lon, c_batt"
+        condition = 'c_type = "SELF"'
+
+        # Build our SELECT query 
+        query = "SELECT %s FROM %s WHERE %s" % (columns, table_name, condition)
+
+        cur = self.dbconn.cursor()
+        result = None
+        try:
+            cur.execute(query)
+            result = cur.fetchall()
+        except sqlite3.OperationalError:
+            #print("Failed to retrieve data")
+            return None
+
+        return result[0]
+
+    
     # @desc     Gets stored information on a particular node from the t_known_nodes table in
     #           database given a specific node id (e.g. a MAC address)
     # @return   TODO

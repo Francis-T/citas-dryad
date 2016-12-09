@@ -21,6 +21,7 @@ from dryad_mt.request_handler import RequestHandler
 from dryad_mt.link_listener import LinkListenerThread
 from dryad_mt.node_state import NodeState
 
+VERSION  = "1.0.1"
 TRIG_EVENT_TIMEOUT = 120.0
 SAMPLING_INTERVAL = 60.0 * 2.0
 #SAMPLING_INTERVAL = 240.0
@@ -118,7 +119,7 @@ def main():
     state.set_state("INACTIVE")
 
     # Create the Request Handler object
-    request_hdl = RequestHandler(trig_event, queue, state, CUSTOM_DATABASE_NAME)
+    request_hdl = RequestHandler(trig_event, queue, state, CUSTOM_DATABASE_NAME, VERSION)
 
     # Create the Link Listener thread
     listen_thread = LinkListenerThread(request_hdl)
