@@ -100,7 +100,7 @@ class RequestHandler():
         print(nodes)
         sensors = "" 
         if len(nodes) > 0:
-            sensors += "{'sensor_id':["
+            sensors += "{'sensors':["
             for idx in range(int(len(nodes)/2)):
                 sn = "'name':'{}', 'state':'{}',"
                 sn += "'site_name':'{}','lat':'{}', 'lon':'{}',"
