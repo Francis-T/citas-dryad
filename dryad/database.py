@@ -368,7 +368,6 @@ class DryadDatabase():
         cur = self.dbconn.cursor()
         result = None
         try:
-            print(query)
             cur.execute(query)
             result = cur.fetchall()
         except sqlite3.OperationalError as e:
@@ -404,7 +403,7 @@ class DryadDatabase():
     # @desc        Queries in the database the details of self - cache node
     #
     # @return    Returns the list of the results containing details
-    def update_self_details(self, node_id=None, lat=None, lon=None, last_scanned=None, last_comms=None):
+    def update_self_details(self, node_id=None, lat=None, lon=None, last_scanned=None, last_comms=None, site_name=None, state=None):
         if not self.dbconn:
             return False
         
@@ -435,7 +434,6 @@ class DryadDatabase():
         # Build our SELECT query 
         query = "UPDATE {} SET {} WHERE {}".format(table_name, update,condition)
 
-        print(query)
         return self.perform(query)
 
     
@@ -472,13 +470,13 @@ class DryadDatabase():
         if not self.dbconn:
             return False
 
-        table_name = "t_node AS tn JOIn t_node_device AS td ON tn.c_node_id = td.c_node_id"
+        table_name = "t_node AS tn JOIN t_node_device AS td ON tn.c_node_id = td.c_node_id"
         columns =   "td.c_addr, td.c_node_id, td.c_type, td.c_lat, td.c_lon, td.c_batt, "
         columns +=  "tn.c_site_name, tn.c_date_updated, td.c_last_scanned, td.c_last_comms "
+        order = "td.c_node_id, td.c_type"
 
         # Build our SELECT query 
-        query = "SELECT %s FROM %s WHERE %s;" % (columns, table_name, condition)
-        print(query)
+        query = "SELECT %s FROM %s WHERE %s ORDER BY %s;" % (columns, table_name, condition, order)
         cur = self.dbconn.cursor()
         result = None
         try:
@@ -527,8 +525,6 @@ class DryadDatabase():
         # And execute it using our database connection 
         return self.perform(query)
 
-
-
     """
         Update node info in the t_knmown_nodes table given a record id
     """
@@ -568,12 +564,13 @@ class DryadDatabase():
         # And execute it using our database connection 
         return self.perform(query)
 
-    def update_node(self, node_id=None, node_class=None):
+    def update_node(self, node_id=None, node_class=None, site_name=None):
         if not self.dbconn:
             return False
 
         # Map function arguments to column update templates
         update_map = [
+            ( 'c_site_name = "{}"',   site_name ),
             ( 'c_class = "{}"',      node_class ),
         ]
         is_first = True
@@ -594,6 +591,22 @@ class DryadDatabase():
 
         # Build our UPDATE query 
         query = "UPDATE {} SET {} WHERE {}".format(table_name, update, condition)
+
+        # And execute it using our database connection 
+        return self.perform(query)
+
+    def remove_node(self, node_id=None, node_class="SENSOR"):
+        if not self.dbconn:
+            return False
+
+        table_name = 't_node_device'
+        if node_class == "SELF":
+            table_name = 't_node'
+        
+        condition = 'c_node_id = "{}"'.format(node_id)
+
+        # Build our DELETE query 
+        query = "DELETE FROM {} WHERE {}".format(table_name, condition)
 
         # And execute it using our database connection 
         return self.perform(query)

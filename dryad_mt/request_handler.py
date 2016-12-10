@@ -85,35 +85,54 @@ class RequestHandler():
         if db.connect(self.dbname) == False:
             return False
 
-		# Add time scanned
+        # Add time scanned
         db.update_self_details(params["name"], params["lat"], params["lon"])
         return link.send_response("RCUPD:OK;\r\n")
 
     def handle_req_list_sensors(self, link, content):
-        # TODO Retrieve sensors list from db
         db = DryadDatabase()
         if db.connect(self.dbname) == False:
             return False
         nodes = db.get_nodes("tn.c_class = 'SENSOR'")
-
-        if sensors is None:
-            sensors = ""
-
-		 
-        #sensors = "{'sensor_id': [{'id': 'xx-123', 'name': 'sn1', 'state': 'pending deployment', 'date_updated': '12-10-94', 'site_name': 'Maribulan', 'lat': '10.12', 'lon': '123.12', 'pf_batt': '98', 'bl_batt': '80'}, {'id': 'xx-124', 'name': 'sn2', 'state': 'deployed', 'date_updated': '12-10-95', 'site_name': 'Maribulan', 'lat': '10.12', 'lon': '125.12', 'pf_batt': '70', 'bl_batt': '80'}]}"
         
+        print(nodes)
+        sensors = "" 
+        if len(nodes) > 0:
+            sensors += "{'sensor_id':["
+            for idx in range(int(len(nodes)/2)):
+                sn = "'name':'{}', 'state':'{}',"
+                sn += "'site_name':'{}','lat':'{}', 'lon':'{}',"
+                sn += "'pf_addr':'{}', 'bl_addr':'{}', 'pf_batt':'{}',"
+                sn += "'bl_batt':'{}'"
+
+                
+                # TODO  Add state in node devices table
+                 # By Pair access of sensor nodes details. Brute force.Should be in sql query
+                sn = sn.format(nodes[2*idx][1], "", nodes[2*idx][6], nodes[2*idx][3], nodes[2*idx][4], nodes[2*idx+1][0], nodes[2*idx][0], nodes[2*idx+1][5], nodes[2*idx][5])
+ 
+                # If last entry, no comma
+                if idx is (int(len(nodes)/2))-1:
+                    sn = "{" + sn + "}"
+                else:                
+                    sn = "{" + sn + "},"
+                sensors += sn
+            sensors += "]}"
+        else:
+            sensors = "" 
+   
+        print(sensors)
+         
         return link.send_response("RNLST:" + sensors + ";\r\n")
    
     def handle_req_setup_sensor(self, link, content):
-        # TODO Add new sensor node settings
         params = {
             "name"        : None, 
             "pf_addr"    : None, 
-            "bl_addr"    : None,
-            "state"        : None,
-            "lat"        : None,
-            "lon"        : None, 
-            "updated"    : None,
+            "bl_addr"   : None,
+            "state"     : None,
+            "lat"       : None,
+            "lon"       : None, 
+            "updated"   : None,
         }
 
         # remove trailing ";" 
@@ -139,19 +158,81 @@ class RequestHandler():
         if db.connect(self.dbname) == False:
             return False
 
-        # TODO Ask if we can have lat lon placed in node rather than node_device
-        db.add_node(node_name=params["name"], node_class=CLASS_SENSOR)
-        db.add_node_device(node_addr=params["bl_addr"], node_name=params["name"], node_type=TYPE_BLUNO, lat=params["lat"], lon=params["lon"])
-        db.add_node_device(node_addr=params["pf_addr"], node_name=params["name"], node_type=TYPE_PARROT, lat=params["lat"], lon=params["lon"])
+        db.add_node(node_id=params["name"], node_class=CLASS_SENSOR)
+        db.add_node_device(node_addr=params["bl_addr"], node_id=params["name"], node_type=TYPE_BLUNO, lat=params["lat"], lon=params["lon"])
+        db.add_node_device(node_addr=params["pf_addr"], node_id=params["name"], node_type=TYPE_PARROT, lat=params["lat"], lon=params["lon"])
         
         return link.send_response("RQRSN:OK;\r\n")
 
     def handle_req_update_sensor(self, link, content):
-        # TODO Update sensor details in the database
+        params = {
+            "name"        : None, 
+            "site_name"    : None, 
+            "state"        : None,
+            "lat"       : None,
+            "lon"       : None, 
+        }
+
+        # remove trailing ";" 
+        if ";" in content:
+            content = content[:-1]
+        else:
+            return False # Incomplete content
+
+        update_args = content.split(',')
+        
+        if len(update_args) > 0:
+            for arg in update_args:
+                if "=" in arg:
+                    param = arg.split("=")[0]
+                    val = arg.split("=")[1]
+                    try:
+                        val = float(val)
+                    except:
+                        pass
+                    if param in params.keys():
+                        params[param] = val     
+        db = DryadDatabase()
+        if db.connect(self.dbname) == False:
+            return False
+
+        db.update_node(node_id=params["name"], site_name=params["site_name"])
+        db.update_node_device(node_id=params["name"], lat=params["lat"], lon=params["lon"])
+
         return link.send_response("RSUPD:OK;\r\n")
 
     def handle_req_remove_sensor(self, link, content):
-        # TODO Update sensor details in the database
+        params = {
+            "rpi_name"    : None, 
+            "sn_name"   : None, 
+        }
+
+        # remove trailing ";" 
+        if ";" in content:
+            content = content[:-1]
+        else:
+            return False # Incomplete content
+
+        remove_args = content.split(',')
+        
+        if len(remove_args) > 0:
+            for arg in remove_args:
+                if "=" in arg:
+                    param = arg.split("=")[0]
+                    val = arg.split("=")[1]
+                    try:
+                        val = float(val)
+                    except:
+                        pass
+                    if param in params.keys():
+                        params[param] = val     
+       
+        db = DryadDatabase()
+        if db.connect(self.dbname) == False:
+            return False
+
+        db.remove_node(node_id=params["sn_name"], node_class="SENSOR")
+        db.remove_node(node_id=params["sn_name"], node_class="SELF" ) 
         return link.send_response("RDLTE:OK;\r\n")
 
     def handle_req_shutdown(self, link, content):
