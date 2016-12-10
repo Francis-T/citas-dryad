@@ -474,8 +474,8 @@ class DryadDatabase():
         columns +=  "td.c_last_scanned, td.c_last_comms "
 
         # Build our SELECT query 
-        query = "SELECT %s FROM %s WHERE %s" % (columns, table_name, condition)
-
+        query = "SELECT %s FROM %s WHERE %s;" % (columns, table_name, condition)
+        print(query)
         cur = self.dbconn.cursor()
         result = None
         try:

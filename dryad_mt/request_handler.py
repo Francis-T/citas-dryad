@@ -17,6 +17,7 @@ CLASS_SENSOR = "SENSOR"
 
 TYPE_PARROT = "PARROT"
 TYPE_BLUNO = "BLUNO"
+
 class RequestHandler():
     def __init__(self, event, queue, state, db_name, version):
         self.hevent = event
@@ -92,15 +93,14 @@ class RequestHandler():
         db = DryadDatabase()
         if db.connect(self.dbname) == False:
             return False
-        sensors = db.get_nodes()
+        nodes = db.get_nodes("tn.c_class = 'SENSOR'")
 
         if sensors is None:
             sensors = ""
 
-        
+		 
         #sensors = "{'sensor_id': [{'id': 'xx-123', 'name': 'sn1', 'state': 'pending deployment', 'date_updated': '12-10-94', 'site_name': 'Maribulan', 'lat': '10.12', 'lon': '123.12', 'pf_batt': '98', 'bl_batt': '80'}, {'id': 'xx-124', 'name': 'sn2', 'state': 'deployed', 'date_updated': '12-10-95', 'site_name': 'Maribulan', 'lat': '10.12', 'lon': '125.12', 'pf_batt': '70', 'bl_batt': '80'}]}"
         
-        print(db.get_nodes())
         return link.send_response("RNLST:" + sensors + ";\r\n")
    
     def handle_req_setup_sensor(self, link, content):

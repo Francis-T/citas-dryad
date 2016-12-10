@@ -8,7 +8,7 @@ sudo hciconfig hci0 up
 sudo hciconfig hci0 piscan
 echo "Done."
 
-#cd ~/Programs/python-projects/dryad-node/
+cd ~/Programs/citas-dryad/
 
 # Run the main program
 echo "Running program..."
