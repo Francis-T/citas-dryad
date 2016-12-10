@@ -14,14 +14,18 @@ UUID_PARROT = "39e1fa00-84a8-11e2-afba-0002a5d5c51b"
 
 NCLAS_UNKNOWN   = "UNKNOWN"
 NCLAS_UNUSED    = "UNUSED"
-NCLAS_BLUNO     = "BLUNO_BEETLE"
-NCLAS_PARROT    = "PARROT_FP"
+NCLAS_SENSOR    = "SENSOR"
+
+NTYPE_UNKNOWN   = "UNKNOWN"
+NTYPE_UNUSED    = "UNUSED"
+NTYPE_BLUNO     = "BLUNO"
+NTYPE_PARROT    = "PARROT"
 
 MAX_CONN_RETRIES = 5
 
 TBL_SVC_ID = [
-    { 'uuid' : UUID_BLUNO, 'device_class' : NCLAS_BLUNO },
-    { 'uuid' : UUID_PARROT, 'device_class' : NCLAS_PARROT },
+    { 'uuid' : UUID_BLUNO, 'device_type' : NTYPE_BLUNO },
+    { 'uuid' : UUID_PARROT, 'device_type' : NTYPE_PARROT },
 ]
 
 module_logger = logging.getLogger("main.custom_ble")
@@ -37,8 +41,8 @@ def scan_for_devices(num):
 
 # @desc     Performs checks to determine the type of Sensor Node this BLE device is
 # @return   A String containing the device class
-def check_device_class(address, name):
-    device_class = NCLAS_UNKNOWN
+def check_device_type(address, name):
+    device_type = NTYPE_UNKNOWN
 
     ppap = Peripheral(None, "public")
 
@@ -67,7 +71,7 @@ def check_device_class(address, name):
     # Return if the device could not be connected to
     if not is_connected:
         module_logger.error("Could not connect to {} ({})".format(address, name))
-        return device_class
+        return device_type
 
     # Return the device type based on the BLE services on the device
     for ref_service in TBL_SVC_ID:
@@ -79,16 +83,16 @@ def check_device_class(address, name):
         
         if not service == None:
             ppap.disconnect()
-            device_class = ref_service['device_class']
+            device_type = ref_service['device_type']
 
             module_logger.info("Service {} found. ".format(ref_service['uuid']))
-            module_logger.info("Device class is {}. ".format(device_class))
+            module_logger.info("Device type is {}. ".format(device_type))
             break
 
     # If the device did not satisfy any of the service-by-uuid checks, flag it as
     #   unusable
-    if device_class == NCLAS_UNKNOWN:
-        device_class = NCLAS_UNUSED
+    if device_type == NTYPE_UNKNOWN:
+        device_type = NTYPE_UNUSED
 
-    return device_class
+    return device_type
 

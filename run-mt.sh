@@ -1,22 +1,24 @@
 #!/bin/bash
 
+#sleep 20
+
+cd /home/pi/Programs/citas-dryad/
+
 # Set the HCI Config to PSCAN so that other devices can connect to it
 echo "Configuring Bluetooth adapter..."
-sudo hciconfig hci1 down
-sudo hciconfig hci0 down
-sudo hciconfig hci0 up
-sudo hciconfig hci0 piscan
+sudo /bin/hciconfig hci1 down
+sudo /bin/hciconfig hci0 down
+sudo /bin/hciconfig hci0 up
+sudo /bin/hciconfig hci0 piscan
 echo "Done."
 
-cd ~/Programs/citas-dryad/
 
 # Run the main program
 echo "Running program..."
 for i in {0..100};
 do
     echo "Iteration $i started."
-    #sudo venv3/bin/python main-mt.py;
-    sudo python3 main-mt.py
+    sudo /usr/bin/python3 main-mt.py
 	RES_CODE=$(echo $?)
     if [ $RES_CODE -ne 0 ];
     then

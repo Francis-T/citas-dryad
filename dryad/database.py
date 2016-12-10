@@ -96,6 +96,7 @@ class DryadDatabase():
         columns += "c_source        VARCHAR, "
         columns += "c_dest          VARCHAR, "
         columns += "c_content       VARCHAR, "
+        columns += "c_upload_time   LONG, "
         columns += "FOREIGN KEY(c_session_id) "
         columns += "    REFERENCES t_session(c_id), "
         columns += "FOREIGN KEY(c_source) "
@@ -141,11 +142,13 @@ class DryadDatabase():
         columns += "c_addr          VARCHAR(17) PRIMARY KEY, "
         columns += "c_node_id       VARCHAR(50), "
         columns += "c_type          VARCHAR(50), "
+        columns += "c_state         VARCHAR(20), "
         columns += "c_batt          FLOAT(5), "
         columns += "c_lat           FLOAT(8), "
         columns += "c_lon           FLOAT(8), "
         columns += "c_last_scanned  LONG, "
         columns += "c_last_comms    LONG, "
+        columns += "c_last_updated  LONG, "
         columns += "FOREIGN KEY(c_node_id) "
         columns += "    REFERENCES t_node(c_node_id) "
 
@@ -239,16 +242,16 @@ class DryadDatabase():
 
     # @desc     Adds new node device information to the table
     # @return   A boolean indicating success or failure
-    def add_node_device(self, node_addr, node_id, node_type, battery= 0, lat = 0, lon = 0, last_scanned = 0, last_comms = 0):
+    def add_node_device(self, node_addr, node_id, node_type, battery= 0, lat = 0, lon = 0, last_scanned = 0, last_comms = 0, last_updated = 0, state = "UNKNOWN"):
         if not self.dbconn:
             return False
 
         table_name = "t_node_device"
-        columns = "c_addr, c_node_id, c_type, c_batt, c_lat, c_lon, c_last_scanned, c_last_comms"
-        values = (node_addr, node_id, node_type, battery, lat, lon, last_scanned, last_comms)
+        columns = "c_addr, c_node_id, c_type, c_batt, c_lat, c_lon, c_last_scanned, c_last_comms, c_last_updated, c_state"
+        values = (node_addr, node_id, node_type, battery, lat, lon, last_scanned, last_comms, last_updated, state)
 
         # Build our INSERT query 
-        query = "INSERT INTO {} ({}) VALUES (?, ?, ?, ?, ?, ?, ?, ?);".format(table_name, columns)
+        query = "INSERT INTO {} ({}) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?);".format(table_name, columns)
 
         # And execute it using our database connection 
         return self.perform(query, values)
@@ -472,7 +475,8 @@ class DryadDatabase():
 
         table_name = "t_node AS tn JOIN t_node_device AS td ON tn.c_node_id = td.c_node_id"
         columns =   "td.c_addr, td.c_node_id, td.c_type, td.c_lat, td.c_lon, td.c_batt, "
-        columns +=  "tn.c_site_name, tn.c_date_updated, td.c_last_scanned, td.c_last_comms "
+        columns +=  "tn.c_site_name, td.c_last_updated, td.c_last_scanned, td.c_last_comms, "
+        columns +=  "td.c_state, tn.c_class"
         order = "td.c_node_id, td.c_type"
 
         # Build our SELECT query 
@@ -528,7 +532,7 @@ class DryadDatabase():
     """
         Update node info in the t_knmown_nodes table given a record id
     """
-    def update_node_device(self, node_id=None, node_addr=None, node_type=None, lat=None, lon=None, batt=None, scan=None, comms=None):
+    def update_node_device(self, node_id=None, node_addr=None, node_type=None, lat=None, lon=None, batt=None, scan=None, comms=None, updated=None):
         if not self.dbconn:
             return False
 
@@ -541,6 +545,7 @@ class DryadDatabase():
             ( 'c_batt = {}',         batt ),
             ( 'c_last_scanned = {}', scan ),
             ( 'c_last_comms = {}',   comms ),
+            ( 'c_last_updated = {}', updated ),
         ]
         is_first = True
 

@@ -45,12 +45,13 @@ class PeripheralDelegate(DefaultDelegate):
         self.readings_left = read_samples
         self.read_until = read_until
 
+        self.is_reading = True
+
         return
 
     def handleNotification(self, cHandle, data):
         data = str(data)
         if cHandle is SERIAL_HDL:
-            print("YOUR DATA> " + str(data))
             if "RUNDP:OK" in data:
                 self.logger.info("Bluno: Undeployed")
 
@@ -62,11 +63,15 @@ class PeripheralDelegate(DefaultDelegate):
                     self.pdevice.req_start_read(self.serial_ch)
 
             if "pH" in data:
+                if self.is_reading == False:
+                    return
+
+                ph_data = data.split("=")[1].split(";")[0].strip()
                 self.readings = np.append( self.readings,
-                                           { "PH": data.split("=")[1].split(";")[0].strip(),
+                                           { "PH": ph_data,
                                              "ts" : int(time()) } )
                 # self.readings = np.append( self.readings, float(data.split("=")[1].split(";")[0].strip()))
-                # self.logger.info( "[BLUNO] pH mean = {}".format( np.mean(self.readings) ))
+                self.logger.info( "[BLUNO] pH = {}".format(ph_data) )
 
                 # Decrease the number of readings
                 self.readings_left -= 1
@@ -74,6 +79,7 @@ class PeripheralDelegate(DefaultDelegate):
                 # Once the desired limit of readings are reached, trigger the
                 #   handle event to signal that the contents can now be taken
                 if (self.should_continue_read() == False):
+                    self.is_reading = False
                     self.hevent.set()
 
         return

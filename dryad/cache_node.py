@@ -19,7 +19,9 @@ from dryad.parrot_ble import Parrot
 IDX_NODE_ADDR   = 0
 IDX_NODE_NAME   = 1
 IDX_NODE_TYPE   = 2
-IDX_NODE_CLASS  = 3
+IDX_NODE_LAT    = 3
+IDX_NODE_LON    = 4
+IDX_NODE_CLASS  = 11
 
 NTYPE_UNKNOWN   = "UNKNOWN"
 NTYPE_UNUSED    = "UNUSED"
@@ -67,7 +69,7 @@ class ReadCompletionWaitTask(Thread):
         return
 
 class ReadNodeTask(Thread):
-    def __init__(self, node_addr, node_id, node_type, node_class, db_name="dryad_test_cache.db"):
+    def __init__(self, node_addr, node_id, node_type, node_class, db_name="dryad_test_cache.db", lat=0.0, lon=0.0):
         Thread.__init__(self)
         self.logger = logging.getLogger("main.cache_node.ReadNodeTask")
         self.node_addr = node_addr
@@ -78,6 +80,8 @@ class ReadNodeTask(Thread):
         self.node_errors = None
         self.node_instance = None
         self.node_read_event = None
+        self.node_lat = lat
+        self.node_lon = lon
         self.db_name = db_name
 
         return
@@ -100,7 +104,16 @@ class ReadNodeTask(Thread):
             return False
 
         # Start collecting data from this node
-        self.node_readings = self.collect_node_data(self.node_instance, self.node_read_event)
+        self.node_readings = None
+        try:
+            self.node_readings = self.collect_node_data(self.node_instance, self.node_read_event)
+        except Exception as e:
+            self.logger.error("Exception occurred: {}".format(e))
+            self.node_readings = None
+
+        if self.node_readings == None:
+            self.logger.error("No data")
+            return False
 
         # Operate on each sensor node reading returned by the sensor
         for reading in self.node_readings:
@@ -121,8 +134,8 @@ class ReadNodeTask(Thread):
             # Add the origin part of the data
             # TODO Lat and Lon are still hardcoded
             data['origin'] = { "name" : self.node_id, 
-                               "lat" : 14.37,                               "lon" : 120.58,
-                               "lon" : 120.58,
+                               "lat" : self.node_lat,
+                               "lon" : self.node_lon,
                                "addr" : self.node_addr }
 
             # Add data to the local data cache
@@ -146,10 +159,10 @@ class ReadNodeTask(Thread):
     ## SEC02: Misc Functions ##
     ## --------------------- ##
     def instantiate_node(self, address, name, n_type, n_class, event):
-        if n_class == ble.NCLAS_BLUNO:
+        if n_type == ble.NTYPE_BLUNO:
             return Bluno(address, name, event)
 
-        elif n_class == ble.NCLAS_PARROT:
+        elif n_type == ble.NTYPE_PARROT:
             return Parrot(address, name, event)
 
         return None
@@ -159,7 +172,9 @@ class ReadNodeTask(Thread):
     def collect_node_data(self, node, event):
         # Start a read operation on the sensor node
         node.set_read_sample_size(10)
-        node.start(time_limit=time() + 65.0)
+        res = node.start(time_limit=time() + 65.0)
+        if (res == False):
+            return None
 
         event.wait(240.0)
         event.clear()
@@ -260,6 +275,8 @@ class CacheNode():
             node_id = node[ IDX_NODE_NAME ]
             node_type = node[ IDX_NODE_TYPE ]
             node_class = node[ IDX_NODE_CLASS ]
+            node_lat = node[ IDX_NODE_LAT ]
+            node_lon = node[ IDX_NODE_LON ]
 
             if (node_id == None) or (node_id == ''):
                 self.logger.info("Skipping blank named {}".format(node_addr))
@@ -267,19 +284,19 @@ class CacheNode():
 
             # If we do not know the class and type of this node, then attempt
             #   to discover it by connecting to the device
-            if node_type == NTYPE_UNKNOWN:
-                node_class = ble.check_device_class( node_addr, node_id )
-                if ( not node_class == ble.NCLAS_UNKNOWN ):
-                    if ( node_class == ble.NCLAS_BLUNO ) or ( node_class == ble.NCLAS_PARROT ):
-                        node_type = NTYPE_SENSOR
+            if node_class == ble.NCLAS_UNKNOWN:
+                node_type = ble.check_device_type( node_addr, node_id )
+                if ( not node_type == ble.NTYPE_UNKNOWN ):
+                    if ( node_type == ble.NTYPE_BLUNO ) or ( node_type == ble.NTYPE_PARROT ):
+                        node_class = ble.NCLAS_SENSOR
 
-                    elif node_class == ble.NCLAS_UNUSED:
-                        node_type = NTYPE_UNUSED
+                    elif node_type == ble.NTYPE_UNUSED:
+                        node_class = NCLAS_UNUSED
 
                     self.update_node_type( node_addr, node_type, node_class )
             
             # Create and start a new ReadNode task
-            t = ReadNodeTask(node_addr, node_id, node_type, node_class)
+            t = ReadNodeTask(node_addr, node_id, node_type, node_class, lat=node_lat, lon=node_lon)
             t.start()
 
             tasks.append(t)
@@ -365,8 +382,10 @@ class CacheNode():
         self_name = os.popen(SYS_CMD_BNAME).read().split(' ')[0]
         self_address = os.popen(SYS_CMD_ADDR).read().strip()
 
-        ddb.add_node(node_id=self_name, node_class=CLASS)
-        ddb.add_node_device(node_addr=self_address, node_id = self_name, node_type = TYPE)
+        self_node = ddb.get_nodes(condition="td.c_type = 'SELF'")
+        if (self_node == None or len(self_node) <= 0):
+            ddb.add_node(node_id=self_name, node_class=CLASS)
+            ddb.add_node_device(node_addr=self_address, node_id = self_name, node_type = TYPE)
 
         self.logger.info("Added cache node details")
         ddb.disconnect()
@@ -401,7 +420,7 @@ class CacheNode():
             return False
 
         # Reload our old node list
-        self.node_list = ddb.get_nodes('td.c_type = "UNKNOWN" OR td.c_type = "SENSOR"')
+        self.node_list = ddb.get_nodes('tn.c_class = "UNKNOWN" OR tn.c_class = "SENSOR"')
 
         ddb.disconnect()
         return True
@@ -416,7 +435,7 @@ class CacheNode():
 
         for node in node_list:
             # If this device already exists, then skip it
-            if ddb.get_node_device(node.addr):
+            if ddb.get_node_device(node.addr.upper()):
                 continue
 
             node_id = node.getValueText( ADTYPE_LOCAL_NAME )

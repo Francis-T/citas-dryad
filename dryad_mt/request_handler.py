@@ -7,9 +7,11 @@ import logging
 import json
 import pprint as pp
 
+from time import time
 from queue import Queue
 from threading import Event
 
+from utils.transform import DataTransformation
 from dryad.database import DryadDatabase
 from dryad_mt.node_state import NodeState
 
@@ -106,9 +108,9 @@ class RequestHandler():
                 sn += "'bl_batt':'{}'"
 
                 
-                # TODO  Add state in node devices table
-                 # By Pair access of sensor nodes details. Brute force.Should be in sql query
-                sn = sn.format(nodes[2*idx][1], "", nodes[2*idx][6], nodes[2*idx][3], nodes[2*idx][4], nodes[2*idx+1][0], nodes[2*idx][0], nodes[2*idx+1][5], nodes[2*idx][5])
+                # Add state in node devices table
+                # By Pair access of sensor nodes details. Brute force.Should be in sql query
+                sn = sn.format(nodes[2*idx][1], nodes[2*idx][10], nodes[2*idx][6], nodes[2*idx][3], nodes[2*idx][4], nodes[2*idx+1][0], nodes[2*idx][0], nodes[2*idx+1][5], nodes[2*idx][5])
  
                 # If last entry, no comma
                 if idx is (int(len(nodes)/2))-1:
@@ -158,9 +160,13 @@ class RequestHandler():
         if db.connect(self.dbname) == False:
             return False
 
+        dt = DataTransformation()
+        bl_addr = dt.conv_mac(params["bl_addr"].upper())
+        pf_addr = dt.conv_mac(params["pf_addr"].upper())
+
         db.add_node(node_id=params["name"], node_class=CLASS_SENSOR)
-        db.add_node_device(node_addr=params["bl_addr"], node_id=params["name"], node_type=TYPE_BLUNO, lat=params["lat"], lon=params["lon"])
-        db.add_node_device(node_addr=params["pf_addr"], node_id=params["name"], node_type=TYPE_PARROT, lat=params["lat"], lon=params["lon"])
+        db.add_node_device(node_addr=bl_addr, node_id=params["name"], node_type=TYPE_BLUNO, lat=params["lat"], lon=params["lon"], last_updated=time())
+        db.add_node_device(node_addr=pf_addr, node_id=params["name"], node_type=TYPE_PARROT, lat=params["lat"], lon=params["lon"], last_updated=time())
         
         return link.send_response("RQRSN:OK;\r\n")
 
@@ -197,7 +203,7 @@ class RequestHandler():
             return False
 
         db.update_node(node_id=params["name"], site_name=params["site_name"])
-        db.update_node_device(node_id=params["name"], lat=params["lat"], lon=params["lon"])
+        db.update_node_device(node_id=params["name"], lat=params["lat"], lon=params["lon"], updated=time())
 
         return link.send_response("RSUPD:OK;\r\n")
 
@@ -255,8 +261,6 @@ class RequestHandler():
         # Parse our argument list
         if len(download_args) > 0:
             for arg in download_args:
-                # TODO This part needs to be cleaned up
-
                 if arg.lower().startswith("limit="):
                     limit = int(arg.split('=')[1])
 
@@ -281,7 +285,7 @@ class RequestHandler():
             return False
 
         if limit == None:
-            limit = 10
+            limit = 3
 
         records = db.get_data(limit=limit, summarize=False)
         proc_ids = []
