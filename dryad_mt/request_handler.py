@@ -85,6 +85,7 @@ class RequestHandler():
         if db.connect(self.dbname) == False:
             return False
 
+		# Add time scanned
         db.update_self_details(params["name"], params["lat"], params["lon"])
         return link.send_response("RCUPD:OK;\r\n")
 
@@ -199,49 +200,34 @@ class RequestHandler():
             return False
 
         if limit == None:
-            limit = 5
+            limit = 10
 
         records = db.get_data(limit=limit, summarize=False)
-        while records != None:
-            proc_ids = []
-            resp_data = []
+        proc_ids = []
+        resp_data = []
 
-            # Compose our response content
-            for rec in records:
-                proc_ids.append( rec[0] )
+        # Compose our response content
+        for rec in records:
+            proc_ids.append( rec[0] )
 
-                resp_data.append( {
-                    "data" : json.loads("[" + rec[3] + "]"),
-                    "timestamp" : rec[2],
-                    "sampling_site" : "Ateneo"
-                } )
-            
-            # Send our response
-            try:
-                resp = json.dumps(resp_data)
-                # pp.pprint(resp_data)
-                if link.send_response(resp) == False:
-                    self.logger.error("Failed to send response")
-                    db.disconnect()
-                    return False
-            except:
-                self.logger.error("Failed to send response due to an exception")
+            resp_data.append( {
+                "data" : json.loads("[" + rec[3] + "]"),
+                "timestamp" : rec[2],
+                "sampling_site" : "Ateneo"
+            } )
+        
+        # Send our response
+        try:
+            resp = json.dumps(resp_data)
+            # pp.pprint(resp_data)
+            if link.send_response(resp) == False:
+                self.logger.error("Failed to send response")
                 db.disconnect()
                 return False
-            
-            # Once data is sent successfully, we can mark off the records whose
-            #   IDs we took note of earlier in our database
-            #for rec_id in proc_ids:
-            #    db.set_data_uploaded(rec_id)
-
-            # Get a new batch of unsent records
-            records = db.get_data(50)
-            
-            if len(records) < 1:
-                self.logger.info("No more data to send")
-                break
-
-            break
+        except:
+            self.logger.error("Failed to send response due to an exception")
+            db.disconnect()
+            return False
 
         db.disconnect()
 

@@ -120,7 +120,9 @@ class DryadDatabase():
         # Build up our columns
         columns =  ""
         columns += "c_node_id       VARCHAR(50) PRIMARY KEY, "
-        columns += "c_class         VARCHAR(50) "
+        columns += "c_class         VARCHAR(50), "
+        columns += "c_site_name     VARCHAR(50), "
+        columns += "c_date_updated  LONG"
 
         # Finally, build our query 
         query = "CREATE TABLE {} ({});".format(table_name, columns)
@@ -139,9 +141,9 @@ class DryadDatabase():
         columns += "c_addr          VARCHAR(17) PRIMARY KEY, "
         columns += "c_node_id       VARCHAR(50), "
         columns += "c_type          VARCHAR(50), "
+        columns += "c_batt          FLOAT(5), "
         columns += "c_lat           FLOAT(8), "
         columns += "c_lon           FLOAT(8), "
-        columns += "c_batt          FLOAT(5), "
         columns += "c_last_scanned  LONG, "
         columns += "c_last_comms    LONG, "
         columns += "FOREIGN KEY(c_node_id) "
@@ -221,32 +223,32 @@ class DryadDatabase():
     ##********************************* ##
     # @desc     Adds new node information to the table
     # @return   A boolean indicating success or failure
-    def add_node(self, node_name, node_class):
+    def add_node(self, node_id, node_class, site_name = None, date_updated = None):
         if not self.dbconn:
             return False
 
         table_name = "t_node"
-        columns = "c_node_id, c_class"
-        values = (node_name, node_class)
+        columns = "c_node_id, c_class, c_site_name, c_date_updated"
+        values = (node_id, node_class, site_name, date_updated)
 
         # Build our INSERT query 
-        query = "INSERT INTO {} ({}) VALUES (?, ?);".format(table_name, columns)
+        query = "INSERT INTO {} ({}) VALUES (?, ?, ?, ?);".format(table_name, columns)
 
         # And execute it using our database connection 
         return self.perform(query, values)
 
     # @desc     Adds new node device information to the table
     # @return   A boolean indicating success or failure
-    def add_node_device(self, node_addr, node_name, node_type, lat=None, lon=None):
+    def add_node_device(self, node_addr, node_id, node_type, battery= 0, lat = 0, lon = 0, last_scanned = 0, last_comms = 0):
         if not self.dbconn:
             return False
 
         table_name = "t_node_device"
-        columns = "c_addr, c_node_id, c_type, c_lat, c_lon"
-        values = (node_addr, node_name, node_type, lat, lon)
+        columns = "c_addr, c_node_id, c_type, c_batt, c_lat, c_lon, c_last_scanned, c_last_comms"
+        values = (node_addr, node_id, node_type, battery, lat, lon, last_scanned, last_comms)
 
         # Build our INSERT query 
-        query = "INSERT INTO {} ({}) VALUES (?, ?, ?, ?, ?);".format(table_name, columns)
+        query = "INSERT INTO {} ({}) VALUES (?, ?, ?, ?, ?, ?, ?, ?);".format(table_name, columns)
 
         # And execute it using our database connection 
         return self.perform(query, values)
@@ -383,7 +385,7 @@ class DryadDatabase():
             return False
 
         table_name = "t_node_device"
-        columns =   "c_node_id, c_lat, c_lon, c_batt"
+        columns =   "c_node_id, c_lat, c_lon, c_batt, c_last_scanned, c_last_comms"
         condition = 'c_type = "SELF"'
 
         # Build our SELECT query 
@@ -395,22 +397,23 @@ class DryadDatabase():
             cur.execute(query)
             result = cur.fetchall()
         except sqlite3.OperationalError:
-            #print("Failed to retrieve data")
+            print("Failed to retrieve data")
             return None
         return result[0]
     
     # @desc        Queries in the database the details of self - cache node
     #
     # @return    Returns the list of the results containing details
-    def update_self_details(self, node_name=None, lat=None, lon=None):
+    def update_self_details(self, node_id=None, lat=None, lon=None, last_scanned=None, last_comms=None):
         if not self.dbconn:
             return False
         
-        
         update_map = [
-            ( 'c_node_id = "{}"',    node_name ),
+            ( 'c_node_id = "{}"',    node_id ),
             ( 'c_lat = {}',        lat ),
             ( 'c_lon = {}',        lon ),
+            ( 'c_last_scanned = {}',    last_scanned),
+            ( 'c_last_comms = {}', last_comms),
         ]
 
         is_first = True
@@ -425,7 +428,7 @@ class DryadDatabase():
                 else:
                     is_first = False
             
-            update += template.format(value)
+                update += template.format(value)
 
         condition = 'c_type = "SELF"'
 
@@ -444,8 +447,8 @@ class DryadDatabase():
             return False
 
         table_name = "t_node_device"
-        columns =   "c_addr, c_node_id, c_type, c_lat, c_lon, "
-        columns +=  "c_batt, c_last_scanned, c_last_comms "
+        columns =   "c_addr, c_node_id, c_type, c_batt, "
+        columns +=  "c_lat, c_lon, c_last_scanned, c_last_comms "
         condition = 'c_addr = "{}"'.format(device_addr)
 
         # Build our SELECT query 
@@ -469,9 +472,9 @@ class DryadDatabase():
         if not self.dbconn:
             return False
 
-        table_name = "t_node AS tn JOIN t_node_device AS td ON tn.c_node_id = td.c_node_id"
+        table_name = "t_node AS tn JOIn t_node_device AS td ON tn.c_node_id = td.c_node_id"
         columns =   "td.c_addr, td.c_node_id, td.c_type, td.c_lat, td.c_lon, td.c_batt, "
-        columns +=  "td.c_last_scanned, td.c_last_comms "
+        columns +=  "tn.c_site_name, tn.c_date_updated, td.c_last_scanned, td.c_last_comms "
 
         # Build our SELECT query 
         query = "SELECT %s FROM %s WHERE %s;" % (columns, table_name, condition)
@@ -529,7 +532,7 @@ class DryadDatabase():
     """
         Update node info in the t_knmown_nodes table given a record id
     """
-    def update_node_device(self, node_name=None, node_addr=None, node_type=None, lat=None, lon=None, batt=None, scan=None, comms=None):
+    def update_node_device(self, node_id=None, node_addr=None, node_type=None, lat=None, lon=None, batt=None, scan=None, comms=None):
         if not self.dbconn:
             return False
 
@@ -557,7 +560,7 @@ class DryadDatabase():
                 
                 update += template.format(value)
         
-        condition = 'c_node_id = "{}"'.format(node_name)
+        condition = 'c_node_id = "{}"'.format(node_id)
 
         # Build our UPDATE query 
         query = "UPDATE {} SET {} WHERE {}".format(table_name, update, condition)
@@ -565,7 +568,7 @@ class DryadDatabase():
         # And execute it using our database connection 
         return self.perform(query)
 
-    def update_node(self, node_name=None, node_class=None):
+    def update_node(self, node_id=None, node_class=None):
         if not self.dbconn:
             return False
 
@@ -587,7 +590,7 @@ class DryadDatabase():
                 
                 update += template.format(value)
         
-        condition = 'c_node_id = "{}"'.format(node_name)
+        condition = 'c_node_id = "{}"'.format(node_id)
 
         # Build our UPDATE query 
         query = "UPDATE {} SET {} WHERE {}".format(table_name, update, condition)

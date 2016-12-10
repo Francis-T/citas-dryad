@@ -67,11 +67,11 @@ class ReadCompletionWaitTask(Thread):
         return
 
 class ReadNodeTask(Thread):
-    def __init__(self, node_addr, node_name, node_type, node_class, db_name="dryad_test_cache.db"):
+    def __init__(self, node_addr, node_id, node_type, node_class, db_name="dryad_test_cache.db"):
         Thread.__init__(self)
         self.logger = logging.getLogger("main.cache_node.ReadNodeTask")
         self.node_addr = node_addr
-        self.node_name = node_name
+        self.node_id = node_id
         self.node_type = node_type
         self.node_class = node_class
         self.node_readings = None
@@ -91,7 +91,7 @@ class ReadNodeTask(Thread):
         
         # Instantiate this node
         self.node_instance = self.instantiate_node( self.node_addr,
-                                                    self.node_name, 
+                                                    self.node_id, 
                                                     self.node_type, 
                                                     self.node_class, 
                                                     self.node_read_event )
@@ -120,7 +120,7 @@ class ReadNodeTask(Thread):
 
             # Add the origin part of the data
             # TODO Lat and Lon are still hardcoded
-            data['origin'] = { "name" : self.node_name, 
+            data['origin'] = { "name" : self.node_id, 
                                "lat" : 14.37,                               "lon" : 120.58,
                                "lon" : 120.58,
                                "addr" : self.node_addr }
@@ -129,7 +129,7 @@ class ReadNodeTask(Thread):
             #   Note: We might need _data_ to be a JSON-fmted string,
             #         so we use json.dumps() on data[]
             self.add_data(content=dumps(data), 
-                          source=self.node_name, 
+                          source=self.node_id, 
                           timestamp=read_time)
 
         return
@@ -228,11 +228,11 @@ class CacheNode():
 
         scanned_str = "Scanned Devices: | "
         for device in scanned_devices:
-            node_name = device.getValueText( ADTYPE_LOCAL_NAME )
-            if node_name == None:
+            node_id = device.getValueText( ADTYPE_LOCAL_NAME )
+            if node_id == None:
                 continue
 
-            scanned_str +=  node_name + " | "
+            scanned_str +=  node_id + " | "
 
         self.logger.debug(scanned_str)
 
@@ -257,18 +257,18 @@ class CacheNode():
         tasks = []
         for node in self.node_list:
             node_addr = node[ IDX_NODE_ADDR ]
-            node_name = node[ IDX_NODE_NAME ]
+            node_id = node[ IDX_NODE_NAME ]
             node_type = node[ IDX_NODE_TYPE ]
             node_class = node[ IDX_NODE_CLASS ]
 
-            if (node_name == None) or (node_name == ''):
+            if (node_id == None) or (node_id == ''):
                 self.logger.info("Skipping blank named {}".format(node_addr))
                 continue
 
             # If we do not know the class and type of this node, then attempt
             #   to discover it by connecting to the device
             if node_type == NTYPE_UNKNOWN:
-                node_class = ble.check_device_class( node_addr, node_name )
+                node_class = ble.check_device_class( node_addr, node_id )
                 if ( not node_class == ble.NCLAS_UNKNOWN ):
                     if ( node_class == ble.NCLAS_BLUNO ) or ( node_class == ble.NCLAS_PARROT ):
                         node_type = NTYPE_SENSOR
@@ -279,7 +279,7 @@ class CacheNode():
                     self.update_node_type( node_addr, node_type, node_class )
             
             # Create and start a new ReadNode task
-            t = ReadNodeTask(node_addr, node_name, node_type, node_class)
+            t = ReadNodeTask(node_addr, node_id, node_type, node_class)
             t.start()
 
             tasks.append(t)
@@ -365,9 +365,10 @@ class CacheNode():
         self_name = os.popen(SYS_CMD_BNAME).read().split(' ')[0]
         self_address = os.popen(SYS_CMD_ADDR).read().strip()
 
-        ddb.add_node(node_name=self_name, node_class=CLASS)
-        ddb.add_node_device(node_addr=self_address, node_name = self_name, node_type = TYPE)
+        ddb.add_node(node_id=self_name, node_class=CLASS)
+        ddb.add_node_device(node_addr=self_address, node_id = self_name, node_type = TYPE)
 
+        self.logger.info("Added cache node details")
         ddb.disconnect()
         return True
 
@@ -380,11 +381,11 @@ class CacheNode():
             return False
 
         # Setup the database if necessary
-        if ddb.update_node_device(node_name=addr, node_type=ntype) == False:
+        if ddb.update_node_device(node_id=addr, node_type=ntype) == False:
             self.logger.error("Failed to update node type in database")
             return False
 
-        if ddb.update_node(node_name=addr, node_class=nclass) == False:
+        if ddb.update_node(node_id=addr, node_class=nclass) == False:
             self.logger.error("Failed to update node type in database")
             return False
 
@@ -400,7 +401,7 @@ class CacheNode():
             return False
 
         # Reload our old node list
-        self.node_list = ddb.get_nodes('C_TYPE = "UNKNOWN" OR C_TYPE = "SENSOR"')
+        self.node_list = ddb.get_nodes('td.c_type = "UNKNOWN" OR td.c_type = "SENSOR"')
 
         ddb.disconnect()
         return True
@@ -418,10 +419,10 @@ class CacheNode():
             if ddb.get_node_device(node.addr):
                 continue
 
-            node_name = node.getValueText( ADTYPE_LOCAL_NAME )
-            if not node_name == None:
-                ddb.add_node(node_name, "UNKNOWN")
-                ddb.add_node_device(node.addr, node_name, "UNKNOWN")
+            node_id = node.getValueText( ADTYPE_LOCAL_NAME )
+            if not node_id == None:
+                ddb.add_node(node_id, "UNKNOWN")
+                ddb.add_node_device(node.addr, node_id, "UNKNOWN")
 
         ddb.disconnect()
 
