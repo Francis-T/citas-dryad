@@ -46,6 +46,7 @@ class PeripheralDelegate(DefaultDelegate):
         self.read_until = read_until
 
         self.is_reading = True
+        self.continue_read = 14
 
         return
 
@@ -61,6 +62,12 @@ class PeripheralDelegate(DefaultDelegate):
             if "RDEND:OK" in data:
                 if (self.readings_left > 0):
                     self.pdevice.req_start_read(self.serial_ch)
+
+                if (self.continue_read > 0):
+                    sleep(20.0)
+                    self.pdevice.req_start_read(self.serial_ch)
+                    self.continue_read -= 1
+                
 
             if "pH" in data:
                 if self.is_reading == False:

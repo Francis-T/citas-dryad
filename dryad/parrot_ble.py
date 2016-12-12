@@ -60,6 +60,8 @@ FLAG_NOTIF_DISABLE  = "\x00\x00"
 
 DEBUG_RAW_DATA = True
 
+READ_FREQ = 20.0
+
 
 class ReadThread(Thread):
     def __init__(self, pdevice, event, read_samples=0, read_until=0):
@@ -115,7 +117,7 @@ class ReadThread(Thread):
 
             self.readings.append( reading )
             self.readings_left -= 1
-            sleep(1.0)
+            sleep(READ_FREQ)
 
         return
 

@@ -298,7 +298,7 @@ class RequestHandler():
             resp_data.append( {
                 "data" : json.loads("[" + rec[3] + "]"),
                 "timestamp" : rec[2],
-                "sampling_site" : "Ateneo"
+                "sampling_site" : "1"
             } )
         
         # Send our response

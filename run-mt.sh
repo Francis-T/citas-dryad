@@ -1,6 +1,6 @@
 #!/bin/bash
 
-#sleep 20
+sleep 20
 
 cd /home/pi/Programs/citas-dryad/
 

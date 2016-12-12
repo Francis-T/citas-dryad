@@ -329,7 +329,7 @@ class DryadDatabase():
         # Build our SELECT query 
         table_name = "t_data_cache AS td JOIN t_session AS ts ON td.c_session_id = ts.c_id"
         columns = "td.c_id, td.c_source, ts.c_end_time, td.c_content, td.c_dest"
-        query = "SELECT %s FROM %s WHERE %s" % (columns, table_name, cond)
+        query = "SELECT %s FROM %s WHERE %s ORDER BY td.c_id DESC" % (columns, table_name, cond)
 
         # Set our offset 
         if limit == 0:

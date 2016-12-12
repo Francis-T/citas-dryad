@@ -171,8 +171,8 @@ class ReadNodeTask(Thread):
     # @return   A Numpy array containing the readings
     def collect_node_data(self, node, event):
         # Start a read operation on the sensor node
-        node.set_read_sample_size(10)
-        res = node.start(time_limit=time() + 65.0)
+        node.set_read_sample_size(5000)
+        res = node.start(time_limit=time() + (60.0*5.5))
         if (res == False):
             return None
 
