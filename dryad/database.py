@@ -1,6 +1,6 @@
 """
     Name: database.py
-    Author: Francis
+    Author: Jerelyn C / Francis
     Description:
         Source code for the Database controller module
 """
@@ -421,6 +421,35 @@ class DryadDatabase():
         is_first = True
        
         table_name = "t_node_device"
+        
+        update = ""
+        for template, value in update_map:
+            if not value == None:
+                if not is_first: 
+                    update += ", "
+                else:
+                    is_first = False
+            
+                update += template.format(value)
+
+        condition = 'c_type = "SELF"'
+
+        # Build our SELECT query 
+        query = "UPDATE {} SET {} WHERE {}".format(table_name, update, condition)
+
+        result = self.perform(query)
+
+        if (result == False):
+            return result
+        
+        update_map = [
+            ( 'c_site_name = {}',    site_name ),
+            ( 'c_date_updated = {}', int(time.time()) ),
+        ]
+
+        is_first = True
+       
+        table_name = "t_node"
         
         update = ""
         for template, value in update_map:

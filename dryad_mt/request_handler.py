@@ -1,6 +1,6 @@
 """
     Name: request_handler.py
-    Author: Francis T
+    Author: Jerelyn C / Francis T
     Desc: Source code for the Cache Node request handler
 """
 import logging
@@ -37,7 +37,10 @@ class RequestHandler():
             return False
     
         # Retrive details about the cache node from the database
-        details = db.get_self_details()    
+        details = db.get_self_details()
+
+        # Disconnect from the DB since we no longer need it
+        db.disconnect()
 
         # Format the string to return
         state = "'state':'{}','batt':{},'version':'{}','lat':{},'lon':{}"
@@ -64,7 +67,7 @@ class RequestHandler():
         return link.send_response("RDEAC:OK;\r\n")
 
     def handle_req_update_cache(self, link, content):
-        params = {"name":None, "lat":None, "lon":None}
+        params = {"name":None, "lat":None, "lon":None, "site_name":None}
 
         # remove trailing ";" 
         if ";" in content:
@@ -87,8 +90,15 @@ class RequestHandler():
         if db.connect(self.dbname) == False:
             return False
 
-        # Add time scanned
-        db.update_self_details(params["name"], params["lat"], params["lon"])
+        # Update cache node details in the DB
+        db.update_self_details(node_id = params["name"], 
+                               lat = params["lat"], 
+                               lon = params["lon"],
+                               site_name = params["site_name"])
+
+        # Disconnect from the DB since we no longer need it
+        db.disconnect()
+
         return link.send_response("RCUPD:OK;\r\n")
 
     def handle_req_list_sensors(self, link, content):

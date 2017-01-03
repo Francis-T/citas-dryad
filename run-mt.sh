@@ -14,12 +14,13 @@ echo "Done."
 
 
 # Run the main program
-echo "Running program..."
+echo "Script started."
 for i in {0..100};
 do
     echo "Iteration $i started."
     sudo /usr/bin/python3 main-mt.py
 	RES_CODE=$(echo $?)
+    echo "Result = $RES_CODE"
     if [ $RES_CODE -ne 0 ];
     then
         break;
@@ -27,5 +28,11 @@ do
     
     echo "Iteration $1 finished."
 done;
-echo "Program finished. "
+echo "Script finished. "
+
+# Shutdown the RPI as well if PWDN is received
+if [ $RES_CODE -eq 1 ];
+then
+    sudo shutdown -h now
+fi;
 

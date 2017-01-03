@@ -1,6 +1,6 @@
 """
     Name: main-mt.py
-    Author: Francis T
+    Author: Jerelyn C / Francis T
     Desc: Source code for the multi-threaded version of the Dryad program
 """
 
@@ -12,7 +12,6 @@ from queue import Queue
 from threading import Thread, Event, Timer
 
 from dryad import custom_ble as ble
-# from dryad import parrot_ble
 from dryad import bluno_ble
 
 from dryad.cache_node import CacheNode
@@ -28,7 +27,8 @@ SAMPLING_INTERVAL = 60.0 * 5.0
 MAX_TRIAL_COUNT = 10
 MAX_SAMPLE_COUNT = 100
 SCANNING_INTERVAL = 600.0
-USE_LED = True
+
+DEBUG_MODE = False
 
 CUSTOM_DATABASE_NAME = "dryad_test_cache.db"
 
@@ -41,8 +41,8 @@ class InputThread(Thread):
         return
 
     def run(self):
-        is_running = True
-        while is_running:
+        self.is_running = True
+        while self.is_running:
             cmd = input("> ")
             if (cmd == "QUIT"):
                 self.queue.put("SHUTDOWN")
@@ -91,9 +91,11 @@ def add_sampling_task():
     trig_event.set()
     return
 
-"""
-    Main function
-"""
+# @desc     Main function
+# @return   An integer exit code:
+#           1 = triggered shutdown
+#           0 = self shutdown
+#           -1 = error shutdown
 def main():
     exit_code = 0
     if init_logger() == False:
@@ -133,8 +135,10 @@ def main():
     # Initialize timing variables
     last_scan_time = 0.0
 
-    input_thread = InputThread(queue, trig_event)
-    input_thread.start()
+    if DEBUG_MODE == True:
+        # Enable debug input thread
+        input_thread = InputThread(queue, trig_event)
+        input_thread.start()
 
     try:
         while True:
@@ -178,8 +182,11 @@ def main():
                     logger.info("Reload sensor node list failed")
 
                 # Collect data (blocking)
+                state.set_state("GATHERING")
                 cache_node.collect_data(queue)
+                state.set_state("IDLE")
 
+                # Queue up another sampling task
                 sampling_timer = Timer(SAMPLING_INTERVAL, add_sampling_task)
                 sampling_timer.start()
 
@@ -198,7 +205,7 @@ def main():
         listen_thread.cancel()
         listen_thread.join(20.0)
 
-    if input_thread.is_alive():
+    if (DEBUG_MODE == True) and (input_thread.is_alive()):
         input_thread.cancel()
         input_thread.join(20.0)
 
@@ -209,5 +216,4 @@ def main():
 
 if __name__ == "__main__":
     sys.exit(main())
-
 

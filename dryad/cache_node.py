@@ -1,7 +1,6 @@
-
 """
     Name: cache_node.py
-    Author: Francis T
+    Author: Jerelyn C / Francis T
     Desc: Source code for the Python object representation of Cache Node
 """
 import logging
@@ -206,7 +205,6 @@ class ReadNodeTask(Thread):
         return self.node_readings
 
 class CacheNode():
-
     def __init__(self, db_name="dryad_test_cache.db"):
         self.node_list = []
         self.logger = logging.getLogger("main.cache_node.CacheNode")
