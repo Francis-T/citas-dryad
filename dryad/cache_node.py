@@ -251,11 +251,11 @@ class CacheNode():
 
         # Update the node list stored in our database
         if self.update_node_list(scanned_devices) == False:
-            return False
+           return False
 
         # Reload our node list from the database
         if self.reload_node_list() == False:
-            return False
+           return False
 
         return True
 

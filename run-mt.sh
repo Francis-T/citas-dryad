@@ -30,9 +30,9 @@ do
 done;
 echo "Script finished. "
 
-# Shutdown the RPI as well if PWDN is received
-if [ $RES_CODE -eq 1 ];
-then
-    sudo shutdown -h now
-fi;
+## Shutdown the RPI as well if PWDN is received
+#if [ $RES_CODE -eq 1 ];
+#then
+#    sudo shutdown -h now
+#fi;
 

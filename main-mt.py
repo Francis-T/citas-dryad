@@ -175,7 +175,7 @@ def main():
                 #   then perform one to find any new senor nodes
                 if time.time() > (last_scan_time + SCANNING_INTERVAL):
                     state.set_state("SCANNING")
-                    cache_node.scan_le_nodes()
+                    #cache_node.scan_le_nodes()
 
                 # Load basic sensor node info from the database
                 if ( cache_node.reload_node_list() == False ):

@@ -432,7 +432,7 @@ class DryadDatabase():
             
                 update += template.format(value)
 
-        condition = 'c_type = "SELF"'
+        condition = 'c_node_id = node_id'
 
         # Build our SELECT query 
         query = "UPDATE {} SET {} WHERE {}".format(table_name, update, condition)
@@ -461,7 +461,7 @@ class DryadDatabase():
             
                 update += template.format(value)
 
-        condition = 'c_type = "SELF"'
+        condition = 'c_node_id = node_id'
 
         # Build our SELECT query 
         query = "UPDATE {} SET {} WHERE {}".format(table_name, update,condition)
@@ -606,6 +606,7 @@ class DryadDatabase():
         update_map = [
             ( 'c_site_name = "{}"',   site_name ),
             ( 'c_class = "{}"',      node_class ),
+            ( 'c_date_updated = "{}"', int(time.time()) ),
         ]
         is_first = True
 

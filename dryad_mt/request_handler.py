@@ -64,10 +64,16 @@ class RequestHandler():
         # And trigger the event handler
         self.hevent.set()
 
+       
         return link.send_response("RDEAC:OK;\r\n")
 
     def handle_req_update_cache(self, link, content):
-        params = {"name":None, "lat":None, "lon":None, "site_name":None}
+        params = {
+            "name"      :   None, 
+            "lat"       :   None, 
+            "lon"       :   None, 
+            "site_name" :   None
+        }
 
         # remove trailing ";" 
         if ";" in content:
