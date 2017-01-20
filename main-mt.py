@@ -11,9 +11,6 @@ import sys
 from queue import Queue
 from threading import Thread, Event, Timer
 
-from dryad import custom_ble as ble
-from dryad import bluno_ble
-
 from dryad.cache_node import CacheNode
 from dryad.database import DryadDatabase
 from dryad_mt.request_handler import RequestHandler
@@ -113,7 +110,6 @@ def main():
     queue = Queue()
     state = NodeState()
 
-    # Instantiate and initialize a CacheNode object
     cache_node = CacheNode()
     cache_node.initialize()
 

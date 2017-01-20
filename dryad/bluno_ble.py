@@ -62,7 +62,7 @@ class PeripheralDelegate(DefaultDelegate):
             if "RDEND:OK" in data:
                 if (self.readings_left > 0):
                     self.pdevice.req_start_read(self.serial_ch)
-
+                
                 if (self.continue_read > 0):
                     sleep(20.0)
                     self.pdevice.req_start_read(self.serial_ch)
@@ -214,9 +214,13 @@ class Bluno():
         self.pdevice.waitForNotifications(1.0)
 
         ns = 0
-        while ns < self.read_sample_size:
+        while self.pdelegate.should_continue_read():
             self.pdevice.waitForNotifications(2.0)
             ns += 1
+            self.logger.info("ns={}".format(ns))
+
+        self.logger.info("Finished QREAD")
+        self.hevent.set()
 
         return True
 

@@ -108,6 +108,8 @@ class ReadThread(Thread):
         while self.should_continue_read():
             # Retrieve the readings
             reading = self.pdevice.read_sensors(sensors=["SUNLIGHT", "SOIL_EC", "SOIL_TEMP", "AIR_TEMP", "VWC", "CAL_VWC", "CAL_AIR_TEMP", "CAL_DLI", "CAL_EA", "CAL_ECB", "CAL_EC_POROUS", "BATTERY"])
+            if (reading == None):
+                return
             
             out_str = "[{}] ".format(self.pdevice.ble_name)
             for key, val in reading.items():
@@ -277,7 +279,7 @@ class Parrot():
     
 
     # returns dictionary of sensor readings from parrot flower 
-    def read_sensors(self, sensors=["SUNLIGHT", "SOIL_EC", "SOIL_TEMP", "AIR_TEMP", "VWC", "CAL_VWC", "CAL_AIR_TEMP", "CAL_DLI", "CAL_EA", "CAL_ECB", "CAL_EC_POROUS", "BATTERY"]):
+    def read_sensors(self, sensors=["SUNLIGHT", "SOIL_TEMP", "AIR_TEMP", "VWC", "CAL_VWC", "CAL_AIR_TEMP", "CAL_DLI", "CAL_EA", "CAL_ECB", "CAL_EC_POROUS", "BATTERY"]):
         tr = transform.DataTransformation()
         
         reading = dict.fromkeys(sensors)
@@ -292,7 +294,7 @@ class Parrot():
                 reading["BATTERY"] = battery_level
         except Exception as err:
             #self.logger.exception(traceback.print_tb(err.__traceback__))
-            self.logger.error("Exception occurrd: {}".format(str(err)))
+            self.logger.error("Exception occurred: {}".format(str(err)))
             return None
 
         self.switch_led(FLAG_NOTIF_ENABLE)

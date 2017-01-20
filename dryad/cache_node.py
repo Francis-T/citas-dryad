@@ -46,7 +46,7 @@ class ReadCompletionWaitTask(Thread):
         self.logger.debug("Waiting for threads to finish...") 
         for t in self.read_threads:
             self.logger.debug("Waiting for thread to finish: " + str(t.name)) 
-            t.join(60.0)
+            t.join(10.0 * 60.0)
             self.logger.debug("Thread finished: " + str(t.name)) 
 
         self.logger.debug("All threads finished")
@@ -171,7 +171,7 @@ class ReadNodeTask(Thread):
     def collect_node_data(self, node, event):
         # Start a read operation on the sensor node
         node.set_read_sample_size(5000)
-        res = node.start(time_limit=time() + (60.0*5.5))
+        res = node.start(time_limit=time() + (60.0*1.5))
         if (res == False):
             return None
 

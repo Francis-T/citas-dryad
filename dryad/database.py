@@ -411,7 +411,7 @@ class DryadDatabase():
             return False
         
         update_map = [
-            ( 'c_node_id = "{}"',    node_id ),
+        #    ( 'c_node_id = "{}"',    node_id ),
             ( 'c_lat = {}',        lat ),
             ( 'c_lon = {}',        lon ),
             ( 'c_last_scanned = {}',    last_scanned),
@@ -432,7 +432,7 @@ class DryadDatabase():
             
                 update += template.format(value)
 
-        condition = 'c_node_id = node_id'
+        condition = 'c_node_id = "{}"'.format(node_id)
 
         # Build our SELECT query 
         query = "UPDATE {} SET {} WHERE {}".format(table_name, update, condition)
@@ -461,7 +461,7 @@ class DryadDatabase():
             
                 update += template.format(value)
 
-        condition = 'c_node_id = node_id'
+        condition = 'c_node_id = "{}"'.format(node_id)
 
         # Build our SELECT query 
         query = "UPDATE {} SET {} WHERE {}".format(table_name, update,condition)
