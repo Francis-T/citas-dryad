@@ -291,6 +291,9 @@ class RequestHandler():
             "cal_ea"        : 14,
             "cal_ecb"       : 15,
             "cal_dli"       : 16,
+            "node_id"       : 17,
+            "lat"           : 18,
+            "lon"           : 19
         }
 
         download_args = content.split(',')
@@ -335,8 +338,10 @@ class RequestHandler():
             proc_ids.append( rec[0] )
             self.logger.info(rec) 
             data = '"ph":"{}","sunlight":"{}","soil_temp":"{}","air_temp":"{}","cal_air_temp":"{}","vwc":"{}","cal_vwc":"{}","soil_ec":"{}","cal_ec_porous":"{}","cal_ea":"{}","cal_ecb":"{}","cal_dli":"{}"'.format( rec[idx["ph"]], rec[idx["sunlight"]], rec[idx["soil_temp"]], rec[idx["air_temp"]], rec[idx["cal_air_temp"]], rec[idx["vwc"]], rec[idx["cal_vwc"]], rec[idx["soil_ec"]], rec[idx["cal_ec_porous"]], rec[idx["cal_ea"]], rec[idx["cal_ecb"]], rec[idx["cal_dli"]] )
+            origin = '"name":"{}","lat":"{}","lon":"{}"'.format(rec[idx["node_id"]], rec[idx["lat"]], rec[idx["lon"]])
             resp_data.append( {
-                "data" : json.loads("[{" + data + "}]"), 
+                "data" : json.loads("{" + data + "}"),
+                "origin": json.loads("{" + origin + "}"),
                 "timestamp" : rec[idx['end_time']],
                 "sampling_site" : "1"
             } )

@@ -384,8 +384,14 @@ class DryadDatabase():
             return self.get_summarized_data(limit, offset, cond)
 
         # Build our SELECT query 
-        table_name = "t_data_cache AS td JOIN t_session AS ts ON td.c_session_id = ts.c_id"
-        columns = "td.c_id, td.c_source, ts.c_end_time, td.c_content, td.c_dest, td.c_ph, c_sunlight, c_soil_temp, c_air_temp, c_cal_air_temp, c_vwc, c_cal_vwc, c_soil_ec, c_cal_ec_porous, c_cal_ea, c_cal_ecb, c_cal_dli" 
+        table_name = "t_data_cache AS td JOIN t_session AS ts ON td.c_session_id IS ts.c_id "
+        table_name += "JOIN t_node AS tn ON tn.c_node_id IS td.c_source JOIN t_node_device AS "
+        table_name += "tnd ON tnd.c_node_id IS tn.c_node_id"
+        columns = "td.c_id, td.c_source, ts.c_end_time, td.c_content, td.c_dest, td.c_ph, "
+        columns += "td.c_sunlight, td.c_soil_temp, td.c_air_temp, td.c_cal_air_temp, td.c_vwc, "
+        columns += "td.c_cal_vwc, td.c_soil_ec, td.c_cal_ec_porous, td.c_cal_ea, td.c_cal_ecb, "
+        columns += "td.c_cal_dli, tnd.c_node_id, tnd.c_lat, tnd.c_lon" 
+        
         query = "SELECT %s FROM %s WHERE %s ORDER BY td.c_id DESC" % (columns, table_name, cond)
 
         # Set our offset 
