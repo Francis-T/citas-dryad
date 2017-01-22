@@ -131,7 +131,6 @@ class ReadNodeTask(Thread):
                 data[key] = val
 
             # Add the origin part of the data
-            # TODO Lat and Lon are still hardcoded
             data['origin'] = { "name" : self.node_id, 
                                "lat" : self.node_lat,
                                "lon" : self.node_lon,
@@ -143,7 +142,6 @@ class ReadNodeTask(Thread):
             self.add_data(content=dumps(data), 
                           source=self.node_id, 
                           timestamp=read_time)
-
         return
 
     def cancel(self):
@@ -165,8 +163,7 @@ class ReadNodeTask(Thread):
             return Parrot(address, name, event)
 
         return None
-
-    # @desc     Collect node data from the individual sensing nodes
+# @desc     Collect node data from the individual sensing nodes
     # @return   A Numpy array containing the readings
     def collect_node_data(self, node, event):
         # Start a read operation on the sensor node
@@ -191,8 +188,8 @@ class ReadNodeTask(Thread):
             return False
 
         session_id = ddb.get_current_session()
-
-        if ddb.add_data(session_id, source, content, "ATENEO") == False:
+        
+        if ddb.add_data(session_id, source, content, node_type=self.node_type, dest="ATENEO") == False:
             self.logger.error("Failed to add new data")
             return False
 

@@ -7,6 +7,8 @@
 import sqlite3
 import time
 import logging
+import json
+import dryad.custom_ble as ble
 
 DEFAULT_DB_NAME = "dryad_cache.db"
 DEFAULT_GET_COND = "c_content IS NOT NULL"
@@ -96,6 +98,19 @@ class DryadDatabase():
         columns += "c_source        VARCHAR, "
         columns += "c_dest          VARCHAR, "
         columns += "c_content       VARCHAR, "
+        ## Adding columns for an column-based content 
+        columns += "c_sunlight      FLOAT(8), "
+        columns += "c_soil_temp     FLOAT(8), "
+        columns += "c_air_temp      FLOAT(8), "
+        columns += "c_cal_air_temp  FLOAT(8), "
+        columns += "c_vwc           FLOAT(8), "
+        columns += "c_cal_vwc       FLOAT(8), "
+        columns += "c_soil_ec       FLOAT(8), "
+        columns += "c_cal_ec_porous FLOAT(8), "
+        columns += "c_cal_ea        FLOAT(8), "
+        columns += "c_cal_ecb       FLOAT(8), "
+        columns += "c_cal_dli       FLOAT(8), "
+        columns += "c_ph            FLOAT(8), "
         columns += "c_upload_time   LONG, "
         columns += "FOREIGN KEY(c_session_id) "
         columns += "    REFERENCES t_session(c_id), "
@@ -272,20 +287,54 @@ class DryadDatabase():
         # And execute it using our database connection 
         return self.perform(query)
 
-    # @desc     Adds a new sensor data record to the table
+    # @desc     Adds / Updates a new sensor data record to the table
     # @return   A boolean indicating success or failure
-    def add_data(self, session_id, source, content, dest=""):
+    def add_data(self, session_id, source, content, node_type, dest=","):
         if not self.dbconn:
             return False
 
-        table_name = "t_data_cache"
-        columns = "c_session_id, c_source, c_dest, c_content"
+        # Initializing flags on which data row to retrieve and update
+        lackingBluno = False
+        lackingParrot = False
+       
+        # Converting back content to its json format
+        content = json.loads(content)
+        
+        # Setting up flags for data retrieval
+        if node_type == ble.NTYPE_BLUNO:
+            lackingBluno = True
+        elif node_type == ble.NTYPE_PARROT:
+            lackingParrot = True
 
-        # Build our INSERT query 
-        query = "INSERT INTO %s (%s) VALUES (?, ?, ?, ?);" % (table_name, columns)
+        # Retrieving last row with no parrot XOR no bluno data
+        last_row_arr = self.get_data(session_id=session_id, node_id=source, limit=1, lacksBluno=lackingBluno, lacksParrot=lackingParrot)
+        # If return is not empty, then there is a row to update 
+        if last_row_arr != []:
+            last_data = last_row_arr[0]
+            last_data_id = last_data[0]
+            if lackingBluno:
+                self.update_data(data_id=last_data_id, node_type=node_type, ph=content["PH"]) 
+            elif lackingParrot:
+                self.update_data(data_id=last_data_id, node_type=node_type, sunlight=content["SUNLIGHT"], soil_temp=content["SOIL_TEMP"], air_temp=content["AIR_TEMP"], cal_air_temp=content["CAL_AIR_TEMP"], vwc=content["VWC"], cal_vwc=content["CAL_VWC"], soil_ec=content["SOIL_EC"], cal_ec_porous=content["CAL_EC_POROUS"], cal_ea=content["CAL_EA"], cal_ecb=content["CAL_ECB"], cal_dli=content["CAL_DLI"]) 
+            return     
+      
+        
+        # There is no row to update, continue to create new row
+        table_name = "t_data_cache"
+        # Varying insert values and query depending from the data source
+        if node_type == ble.NTYPE_BLUNO:
+            columns = "c_session_id, c_source, c_dest, c_content, c_ph, c_upload_time"
+            values = (session_id, source, dest, str(content), content["PH"], str( int(time.time()) )) 
+            query = "INSERT INTO {} ({}) VALUES (?, ?, ?, ?, ?, ?);".format(table_name, columns)
+        elif node_type == ble.NTYPE_PARROT:
+            columns = "c_session_id, c_source, c_dest, c_content, c_sunlight, c_soil_temp,"
+            columns += "c_air_temp, c_cal_air_temp, c_vwc, c_cal_vwc, c_soil_ec, c_cal_ec_porous,"
+            columns += "c_cal_ea, c_cal_ecb, c_cal_dli, c_upload_time"
+            values = (session_id, source, dest, str(content), content["SUNLIGHT"], content["SOIL_TEMP"], content["AIR_TEMP"], content["CAL_AIR_TEMP"], content["VWC"], content["CAL_VWC"], content["SOIL_EC"], content["CAL_EC_POROUS"], content["CAL_EA"], content["CAL_ECB"], content["CAL_DLI"], str( int(time.time()) )) 
+            query = "INSERT INTO {} ({}) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?);".format(table_name, columns)
 
         # And execute it using our database connection 
-        return self.perform(query, (session_id, source, dest, content))
+        return self.perform(query, values)
 
     ##*************************************##
     ##  SEC03: Record Retrieval Functions  ##
@@ -319,16 +368,24 @@ class DryadDatabase():
     # @desc     Retrieve data from the t_data_cache table in our database with the ff
     #           constraints on row return limit, row offset, and filter condition
     # @return   A boolean indicating success or failure
-    def get_data(self, limit=0, offset=0, cond=DEFAULT_GET_COND, summarize=False):
+    def get_data(self, session_id=None, node_id=None, limit=0, offset=0, cond=DEFAULT_GET_COND, summarize=False, lacksParrot=False, lacksBluno=False):
         if not self.dbconn:
             return False
 
+        # Retrieving row that lacks bluno data
+        if lacksBluno == True:
+            cond = "c_source IS '{}' AND c_session_id IS {} AND c_ph IS NULL".format(node_id, session_id)
+        # Retrieving row that lacks parrot data
+        if lacksParrot == True:
+            cond = "c_source IS '{}' AND c_session_id IS {} AND c_soil_temp IS NULL".format(node_id, session_id)
+
+        # Returning summarized data
         if summarize == True:
             return self.get_summarized_data(limit, offset, cond)
 
         # Build our SELECT query 
         table_name = "t_data_cache AS td JOIN t_session AS ts ON td.c_session_id = ts.c_id"
-        columns = "td.c_id, td.c_source, ts.c_end_time, td.c_content, td.c_dest"
+        columns = "td.c_id, td.c_source, ts.c_end_time, td.c_content, td.c_dest, td.c_ph, c_sunlight, c_soil_temp, c_air_temp, c_cal_air_temp, c_vwc, c_cal_vwc, c_soil_ec, c_cal_ec_porous, c_cal_ea, c_cal_ecb, c_cal_dli" 
         query = "SELECT %s FROM %s WHERE %s ORDER BY td.c_id DESC" % (columns, table_name, cond)
 
         # Set our offset 
@@ -623,6 +680,55 @@ class DryadDatabase():
                 update += template.format(value)
         
         condition = 'c_node_id = "{}"'.format(node_id)
+
+        # Build our UPDATE query 
+        query = "UPDATE {} SET {} WHERE {}".format(table_name, update, condition)
+
+        # And execute it using our database connection 
+        return self.perform(query)
+
+
+    def update_data(self, data_id=None, node_type=ble.NTYPE_PARROT, sunlight=None, soil_temp=None, air_temp=None, cal_air_temp=None, vwc=None, cal_vwc=None, soil_ec=None, cal_ec_porous=None, cal_ea=None, cal_ecb=None, cal_dli=None, ph=None):
+        
+        if not self.dbconn:
+            return False
+
+        # Map function arguments to column update templates
+        if node_type == ble.NTYPE_PARROT: 
+            update_map = [
+                ( 'c_sunlight = "{}"',      sunlight        ),
+                ( 'c_soil_temp = "{}"',     soil_temp       ),
+                ( 'c_air_temp = "{}"',      air_temp        ),
+                ( 'c_cal_air_temp = "{}"',  cal_air_temp    ),
+                ( 'c_vwc= "{}"',            vwc             ),
+                ( 'c_cal_vwc= "{}"',        cal_vwc         ),
+                ( 'c_soil_ec= "{}"',        soil_ec         ),
+                ( 'c_cal_ec_porous= "{}"',  cal_ec_porous   ),
+                ( 'c_cal_ea= "{}"',         cal_ea          ),
+                ( 'c_cal_ecb= "{}"',        cal_ecb         ),
+                ( 'c_cal_dli= "{}"',        cal_dli         ),
+            ]
+        
+        if node_type == ble.NTYPE_BLUNO:
+            update_map = [
+                ( 'c_ph = "{}"',            ph              ),
+            ]
+
+        is_first = True
+
+        # Define the parts of our UPDATE query 
+        table_name = "t_data_cache"
+        update = ""
+        for template, value in update_map:
+            if not value == None:
+                if not is_first:
+                    update += ", "
+                else:
+                    is_first = False
+                
+                update += template.format(value)
+        
+        condition = 'c_id = "{}"'.format(data_id)
 
         # Build our UPDATE query 
         query = "UPDATE {} SET {} WHERE {}".format(table_name, update, condition)

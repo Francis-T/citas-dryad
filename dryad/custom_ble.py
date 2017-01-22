@@ -90,7 +90,7 @@ def check_device_type(address, name):
             break
 
     # If the device did not satisfy any of the service-by-uuid checks, flag it as
-    #   unusable
+   #   unusable
     if device_type == NTYPE_UNKNOWN:
         device_type = NTYPE_UNUSED
 

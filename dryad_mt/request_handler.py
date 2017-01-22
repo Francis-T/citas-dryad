@@ -272,6 +272,27 @@ class RequestHandler():
         end_id = None
         unsent_only = False
 
+        # Indices
+        idx = {
+            "id"            : 0,
+            "source"        : 1,
+            "end_time"      : 2,
+            "content"       : 3,
+            "dest"          : 4,
+            "ph"            : 5,
+            "sunlight"      : 6,
+            "soil_temp"     : 7,
+            "air_temp"      : 8,
+            "cal_air_temp"  : 9,
+            "vwc"           : 10,
+            "cal_vwc"       : 11,
+            "soil_ec"       : 12,
+            "cal_ec_porous" : 13,
+            "cal_ea"        : 14,
+            "cal_ecb"       : 15,
+            "cal_dli"       : 16,
+        }
+
         download_args = content.split(',')
 
         # Parse our argument list
@@ -296,6 +317,7 @@ class RequestHandler():
                     else:
                         unsent_only = False
 
+        # Merge ph and parrot flower data here
         db = DryadDatabase()
         if db.connect(self.dbname) == False:
             return False
@@ -307,13 +329,15 @@ class RequestHandler():
         proc_ids = []
         resp_data = []
 
+        # TODO Change sampling site value
         # Compose our response content
         for rec in records:
             proc_ids.append( rec[0] )
-
+            self.logger.info(rec) 
+            data = '"ph":"{}","sunlight":"{}","soil_temp":"{}","air_temp":"{}","cal_air_temp":"{}","vwc":"{}","cal_vwc":"{}","soil_ec":"{}","cal_ec_porous":"{}","cal_ea":"{}","cal_ecb":"{}","cal_dli":"{}"'.format( rec[idx["ph"]], rec[idx["sunlight"]], rec[idx["soil_temp"]], rec[idx["air_temp"]], rec[idx["cal_air_temp"]], rec[idx["vwc"]], rec[idx["cal_vwc"]], rec[idx["soil_ec"]], rec[idx["cal_ec_porous"]], rec[idx["cal_ea"]], rec[idx["cal_ecb"]], rec[idx["cal_dli"]] )
             resp_data.append( {
-                "data" : json.loads("[" + rec[3] + "]"),
-                "timestamp" : rec[2],
+                "data" : json.loads("[{" + data + "}]"), 
+                "timestamp" : rec[idx['end_time']],
                 "sampling_site" : "1"
             } )
         
