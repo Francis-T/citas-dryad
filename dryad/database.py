@@ -302,16 +302,17 @@ class DryadDatabase():
         
         # Setting up flags for data retrieval
         if node_type == ble.NTYPE_BLUNO:
-            lackingBluno = True
+            cond = "c_source IS '{}' AND c_session_id IS {} AND c_ph IS NULL".format(source, session_id)
+            lackingBluno = True 
         elif node_type == ble.NTYPE_PARROT:
+            cond = "c_source IS '{}' AND c_session_id IS {} AND c_soil_temp IS NULL".format(node_id, session_id)
             lackingParrot = True
 
         # Retrieving last row with no parrot XOR no bluno data
-        last_row_arr = self.get_data(session_id=session_id, node_id=source, limit=1, lacksBluno=lackingBluno, lacksParrot=lackingParrot)
+        last_row_arr = self.get_data(session_id=session_id, node_id=source, limit=1, cond=cond)
         # If return is not empty, then there is a row to update 
         if last_row_arr != []:
-            last_data = last_row_arr[0]
-            last_data_id = last_data[0]
+            last_data_id = last_row_arr[0][0]
             if lackingBluno:
                 self.update_data(data_id=last_data_id, node_type=node_type, ph=content["PH"]) 
             elif lackingParrot:
@@ -371,13 +372,6 @@ class DryadDatabase():
     def get_data(self, session_id=None, node_id=None, limit=0, offset=0, cond=DEFAULT_GET_COND, summarize=False, lacksParrot=False, lacksBluno=False):
         if not self.dbconn:
             return False
-
-        # Retrieving row that lacks bluno data
-        if lacksBluno == True:
-            cond = "c_source IS '{}' AND c_session_id IS {} AND c_ph IS NULL".format(node_id, session_id)
-        # Retrieving row that lacks parrot data
-        if lacksParrot == True:
-            cond = "c_source IS '{}' AND c_session_id IS {} AND c_soil_temp IS NULL".format(node_id, session_id)
 
         # Returning summarized data
         if summarize == True:
