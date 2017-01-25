@@ -1,5 +1,5 @@
 from bluepy.btle import Peripheral, UUID, DefaultDelegate
-from threading import Event
+from threading import Event, Thread
 from collections import defaultdict 
 from time import sleep, time
 
@@ -32,6 +32,17 @@ MAX_CONN_RETRIES = 10
 # Security variables
 DFR_PWD_STR = str(bytearray(b"AT+PASSWOR=DFRobot\r\n"))
 DFR_BDR_STR = str(bytearray(b"AT+CURRUART=115200\r\n"))
+
+class ReadCompleteTask(Thread):
+    def __init__(self, event, delay=0.0):
+        self.hevent = event
+        self.delay = delay
+        return
+
+    def run(self):
+        sleep(self.delay)
+        self.hevent.set()
+        return
 
 class PeripheralDelegate(DefaultDelegate):
     def __init__(self, pdevice, serial_ch, event, read_samples, read_until):
@@ -126,7 +137,7 @@ class Bluno():
 
         self.hevent = event
 
-        self.read_sample_size = 10
+        self.max_samples = 10
         self.logger = logging.getLogger("main.parrot_ble.Parrot")
 
         return
@@ -183,7 +194,7 @@ class Bluno():
 
     # @desc     Starts a read operation on this sensor
     # @return   A boolean indicating success or failure
-    def start(self, time_limit=0):
+    def start(self, read_until=0):
         # Ensure that we are connected
         if (self.is_connected == False):
             res = self.connect()
@@ -196,8 +207,8 @@ class Bluno():
         self.pdelegate = PeripheralDelegate(self, 
                                             serial_ch=serial_ch,
                                             event=self.hevent,
-                                            read_samples=self.read_sample_size,
-                                            read_until=time_limit )
+                                            read_samples=self.max_samples,
+                                            read_until=read_until )
         self.pdevice.setDelegate( self.pdelegate )
         
         # TODO This shouldn't be here in the future since we expect the
@@ -220,7 +231,12 @@ class Bluno():
             self.logger.info("ns={}".format(ns))
 
         self.logger.info("Finished QREAD")
-        self.hevent.set()
+
+        # TODO Workaround for triggering the data collection wait event.
+        #      Eventually, the entire contents of this function would
+        #      be on its own thread
+        rct = ReadCompleteTask(self.hevent, 2.0)
+        rct.start()
 
         return True
 
@@ -261,8 +277,8 @@ class Bluno():
     
     # @desc     Set the number of samples per read session
     # @return   None
-    def set_read_sample_size(self, sample_size):
-        self.read_sample_size = sample_size
+    def set_max_samples(self, count):
+        self.max_samples = count
         return
 
     # @desc     Gets the readings from the Peripheral Delegate

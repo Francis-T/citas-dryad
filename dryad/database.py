@@ -500,7 +500,7 @@ class DryadDatabase():
             return result
         
         update_map = [
-            ( 'c_site_name = {}',    site_name ),
+            ( 'c_site_name = "{}"',    site_name ),
             ( 'c_date_updated = {}', int(time.time()) ),
         ]
 
@@ -521,7 +521,7 @@ class DryadDatabase():
         condition = 'c_node_id = "{}"'.format(node_id)
 
         # Build our SELECT query 
-        query = "UPDATE {} SET {} WHERE {}".format(table_name, update,condition)
+        query = "UPDATE {} SET {} WHERE {}".format(table_name, update, condition)
 
         return self.perform(query)
 

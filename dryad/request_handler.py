@@ -13,7 +13,7 @@ from threading import Event
 
 from utils.transform import DataTransformation
 from dryad.database import DryadDatabase
-from dryad_mt.node_state import NodeState
+from dryad.node_state import NodeState
 
 CLASS_SENSOR = "SENSOR"
 
@@ -86,21 +86,27 @@ class RequestHandler():
                 if "=" in arg:
                     param = arg.split("=")[0]
                     val = arg.split("=")[1]
-                    try:
-                        val = float(val)
-                    except:
-                        pass
+
                     if param in params.keys():
-                        params[param] = val     
+                        if param == "lat" or param == "lon":
+                            val = float(val)
+                            params[param] = val
+                        else:
+                            params[param] = val.strip("'").strip('"')
+
         db = DryadDatabase()
         if db.connect(self.dbname) == False:
             return False
 
         # Update cache node details in the DB
-        db.update_self_details(node_id = params["name"], 
-                               lat = params["lat"], 
-                               lon = params["lon"],
-                               site_name = params["site_name"])
+        result = db.update_self_details(node_id = params["name"], 
+                                        lat = params["lat"], 
+                                        lon = params["lon"],
+                                        site_name = params["site_name"])
+        if result == False:
+            self.logger.error("Failed to update cache node details")
+            link.send_response("RCUPD:FAIL;\r\n")
+            return False
 
         # Disconnect from the DB since we no longer need it
         db.disconnect()
@@ -113,7 +119,7 @@ class RequestHandler():
             return False
         nodes = db.get_nodes("tn.c_class = 'SENSOR'")
         
-        print(nodes)
+        # print(nodes)
         sensors = "" 
         if len(nodes) > 0:
             sensors += "{'sensors':["
@@ -138,7 +144,7 @@ class RequestHandler():
         else:
             sensors = "" 
    
-        print(sensors)
+        # print(sensors)
          
         return link.send_response("RNLST:" + sensors + ";\r\n")
    
@@ -153,12 +159,6 @@ class RequestHandler():
             "updated"   : None,
         }
 
-        # remove trailing ";" 
-        if ";" in content:
-            content = content[:-1]
-        else:
-            return False # Incomplete content
-
         update_args = content.split(',')
         
         if len(update_args) > 0:
@@ -166,12 +166,14 @@ class RequestHandler():
                 if "=" in arg:
                     param = arg.split("=")[0]
                     val = arg.split("=")[1]
-                    try:
-                        val = float(val)
-                    except:
-                        pass
+
                     if param in params.keys():
-                        params[param] = val     
+                        if param == "lat" or param == "lon":
+                            val = float(val)
+                            params[param] = val
+                        else:
+                            params[param] = val.strip("'").strip('"')
+
         db = DryadDatabase()
         if db.connect(self.dbname) == False:
             return False
@@ -180,9 +182,23 @@ class RequestHandler():
         bl_addr = dt.conv_mac(params["bl_addr"].upper())
         pf_addr = dt.conv_mac(params["pf_addr"].upper())
 
-        db.add_node(node_id=params["name"], node_class=CLASS_SENSOR)
-        db.add_node_device(node_addr=bl_addr, node_id=params["name"], node_type=TYPE_BLUNO, lat=params["lat"], lon=params["lon"], last_updated=time())
-        db.add_node_device(node_addr=pf_addr, node_id=params["name"], node_type=TYPE_PARROT, lat=params["lat"], lon=params["lon"], last_updated=time())
+        result = db.add_node(node_id=params["name"], node_class=CLASS_SENSOR)
+        if result == False:
+            self.logger.error("Failed to add node")
+            link.send_response("RQRSN:FAIL;\r\n")
+            return False
+
+        result = db.add_node_device(node_addr=bl_addr, node_id=params["name"], node_type=TYPE_BLUNO, lat=params["lat"], lon=params["lon"], last_updated=time())
+        if result == False:
+            self.logger.error("Failed to add node device")
+            link.send_response("RQRSN:FAIL;\r\n")
+            return False
+
+        result = db.add_node_device(node_addr=pf_addr, node_id=params["name"], node_type=TYPE_PARROT, lat=params["lat"], lon=params["lon"], last_updated=time())
+        if result == False:
+            self.logger.error("Failed to add node device")
+            link.send_response("RQRSN:FAIL;\r\n")
+            return False
         
         return link.send_response("RQRSN:OK;\r\n")
 
@@ -198,8 +214,6 @@ class RequestHandler():
         # remove trailing ";" 
         if ";" in content:
             content = content[:-1]
-        else:
-            return False # Incomplete content
 
         update_args = content.split(',')
         
@@ -208,18 +222,29 @@ class RequestHandler():
                 if "=" in arg:
                     param = arg.split("=")[0]
                     val = arg.split("=")[1]
-                    try:
-                        val = float(val)
-                    except:
-                        pass
+
                     if param in params.keys():
-                        params[param] = val     
+                        if param == "lat" or param == "lon":
+                            val = float(val)
+                            params[param] = val
+                        else:
+                            params[param] = val.strip("'").strip('"')
+
         db = DryadDatabase()
         if db.connect(self.dbname) == False:
             return False
 
-        db.update_node(node_id=params["name"], site_name=params["site_name"])
-        db.update_node_device(node_id=params["name"], lat=params["lat"], lon=params["lon"], updated=time())
+        result = db.update_node(node_id=params["name"], site_name=params["site_name"])
+        if result == False:
+            self.logger.error("Failed to update node")
+            link.send_response("RSUPD:FAIL;\r\n")
+            return False
+
+        result = db.update_node_device(node_id=params["name"], lat=params["lat"], lon=params["lon"], updated=time())
+        if result == False:
+            self.logger.error("Failed to update node device")
+            link.send_response("RSUPD:FAIL;\r\n")
+            return False
 
         return link.send_response("RSUPD:OK;\r\n")
 
@@ -229,12 +254,6 @@ class RequestHandler():
             "sn_name"   : None, 
         }
 
-        # remove trailing ";" 
-        if ";" in content:
-            content = content[:-1]
-        else:
-            return False # Incomplete content
-
         remove_args = content.split(',')
         
         if len(remove_args) > 0:
@@ -242,19 +261,30 @@ class RequestHandler():
                 if "=" in arg:
                     param = arg.split("=")[0]
                     val = arg.split("=")[1]
-                    try:
-                        val = float(val)
-                    except:
-                        pass
+
                     if param in params.keys():
-                        params[param] = val     
+                        if param == "lat" or param == "lon":
+                            val = float(val)
+                            params[param] = val
+                        else:
+                            params[param] = val.strip("'").strip('"')
        
         db = DryadDatabase()
         if db.connect(self.dbname) == False:
             return False
 
-        db.remove_node(node_id=params["sn_name"], node_class="SENSOR")
-        db.remove_node(node_id=params["sn_name"], node_class="SELF" ) 
+        result = db.remove_node(node_id=params["sn_name"], node_class="SENSOR")
+        if result == False:
+            self.logger.error("Failed to remove node")
+            link.send_response("RDLTE:FAIL;\r\n")
+            return False
+
+        result = db.remove_node(node_id=params["sn_name"], node_class="SELF" ) 
+        if result == False:
+            self.logger.error("Failed to remove node")
+            link.send_response("RDLTE:FAIL;\r\n")
+            return False
+
         return link.send_response("RDLTE:OK;\r\n")
 
     def handle_req_shutdown(self, link, content):
@@ -366,7 +396,7 @@ class RequestHandler():
     def handle_request(self, link, request):
         # self.logger.info("Message received: {}".format(msg))
 
-        req_parts = request.split(':', 2)
+        req_parts = request.split(':', 1)
 
         if not len(req_parts) == 2:
             self.logger.error("Malformed request: {}".format(request))

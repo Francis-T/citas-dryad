@@ -13,9 +13,9 @@ from threading import Thread, Event, Timer
 
 from dryad.cache_node import CacheNode
 from dryad.database import DryadDatabase
-from dryad_mt.request_handler import RequestHandler
-from dryad_mt.link_listener import LinkListenerThread
-from dryad_mt.node_state import NodeState
+from dryad.request_handler import RequestHandler
+from dryad.link_listener import LinkListenerThread
+from dryad.node_state import NodeState
 
 VERSION  = "1.0.2"
 TRIG_EVENT_TIMEOUT = 120.0
@@ -28,6 +28,11 @@ SCANNING_INTERVAL = 600.0
 DEBUG_MODE = False
 
 CUSTOM_DATABASE_NAME = "dryad_test_cache.db"
+
+# Exit codes
+EXIT_NORMAL     = 0
+EXIT_ERROR      = 1
+EXIT_POWEROFF   = 2
 
 class InputThread(Thread):
     def __init__(self, queue, hevent):
@@ -45,6 +50,7 @@ class InputThread(Thread):
                 self.queue.put("SHUTDOWN")
                 self.hevent.set()
                 is_running = False
+                break
 
             if (cmd == "START"):
                 self.queue.put("ACTIVATE")
@@ -90,13 +96,10 @@ def add_sampling_task():
 
 # @desc     Main function
 # @return   An integer exit code:
-#           1 = triggered shutdown
-#           0 = self shutdown
-#           -1 = error shutdown
 def main():
-    exit_code = 0
+    exit_code = EXIT_NORMAL
     if init_logger() == False:
-        exit_code = -1
+        exit_code = EXIT_ERROR
         return exit_code
 
     logger.info("Program started")
@@ -110,7 +113,9 @@ def main():
     queue = Queue()
     state = NodeState()
 
-    cache_node = CacheNode()
+    cache_node = CacheNode(event=trig_event,
+                           queue=queue,
+                           db_name=CUSTOM_DATABASE_NAME)
     cache_node.initialize()
 
     # Set the initial state to INACTIVE
@@ -163,16 +168,15 @@ def main():
 
             elif msg == "SHUTDOWN":
                 state.set_state("UNKNOWN")
-                exit_code = 1
+                exit_code = EXIT_POWEROFF
                 break
 
-            elif msg == "SAMPLING_START":
-                # If there has been some time since our last scan,
-                #   then perform one to find any new senor nodes
-                if time.time() > (last_scan_time + SCANNING_INTERVAL):
-                    state.set_state("SCANNING")
-                    #cache_node.scan_le_nodes()
+            elif msg == "SCAN":
+                state.set_state("SCANNING")
+                cache_node.scan_le_nodes()
+                state.set_state("IDLE")
 
+            elif msg == "SAMPLING_START":
                 # Load basic sensor node info from the database
                 if ( cache_node.reload_node_list() == False ):
                     logger.info("Reload sensor node list failed")
@@ -186,9 +190,13 @@ def main():
                 sampling_timer = Timer(SAMPLING_INTERVAL, add_sampling_task)
                 sampling_timer.start()
 
+            elif msg == "SAMPLING_END":
+                state.set_state("IDLE")
+                # TODO Our state machine is f---ed up for now
+
     except KeyboardInterrupt:
         logger.info("Interrupted")
-        exit_code = -1
+        exit_code = EXIT_ERROR
 
     # Cancel running threads
     cache_node.cancel_read()

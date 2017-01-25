@@ -1,8 +1,20 @@
 #!/bin/bash
 
-sleep 20
+CACHE_NODE_HOME=/home/pi/Programs/citas-dryad/
 
-cd /home/pi/Programs/citas-dryad/
+# Wait for ~20 seconds while the RPi boots up
+echo -n "Waiting for system to start up...";
+if [ "$1" != "-q" ];
+then
+    for i in {0..20};
+    do
+        sleep 1;
+        echo -n .;
+    done;
+fi;
+echo "Done."
+
+cd $CACHE_NODE_HOME
 
 # Set the HCI Config to PSCAN so that other devices can connect to it
 echo "Configuring Bluetooth adapter..."
@@ -30,9 +42,10 @@ do
 done;
 echo "Script finished. "
 
-## Shutdown the RPI as well if PWDN is received
-#if [ $RES_CODE -eq 1 ];
-#then
+# Shutdown the RPI as well if PWDN is received
+if [ $RES_CODE -eq 2 ];
+then
+    echo "Shutting down now";
 #    sudo shutdown -h now
-#fi;
+fi;
 
