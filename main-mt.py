@@ -13,9 +13,9 @@ from threading import Thread, Event, Timer
 
 from dryad.cache_node import CacheNode
 from dryad.database import DryadDatabase
-from dryad_mt.request_handler import RequestHandler
-from dryad_mt.link_listener import LinkListenerThread
-from dryad_mt.node_state import NodeState
+from dryad.request_handler import RequestHandler
+from dryad.link_listener import LinkListenerThread
+from dryad.node_state import NodeState
 
 VERSION  = "1.0.2"
 TRIG_EVENT_TIMEOUT = 120.0
