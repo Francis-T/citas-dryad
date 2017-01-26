@@ -157,7 +157,7 @@ class Parrot():
 
         self.hevent = event
 
-        self.read_sample_size = 10
+        self.max_samples = 10
         self.live_measure_period = "\x01"
         self.isNewFirmware = True
         self.live_service = None
@@ -221,12 +221,12 @@ class Parrot():
 
     # @desc     Starts a read operation on this sensor
     # @return   A boolean indicating success or failure
-    def start(self, time_limit=0):
+    def start(self, read_until=0):
         if self.read_thread == None:
             self.read_thread = ReadThread(self,
                                           event=self.hevent,
-                                          read_samples=self.read_sample_size,
-                                          read_until=time_limit)
+                                          read_samples=self.max_samples,
+                                          read_until=read_until)
             self.read_thread.start()
 
         return True
@@ -248,8 +248,8 @@ class Parrot():
     ## -------------- ##
     # @desc     Set the number of samples per read session
     # @return   None
-    def set_read_sample_size(self, sample_size):
-        self.read_sample_size = sample_size
+    def set_max_samples(self, count):
+        self.max_samples = count
         return
 
     def get_readings(self):
