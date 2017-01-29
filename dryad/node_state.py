@@ -28,6 +28,7 @@ class NodeState():
         if state.upper() in NODE_STATES:
             self.state = state.upper()
             self.state_lock.release()
+            self.logger.debug("State Changed: {}".format(state))
             return True
 
         self.logger.error("Invalid state: {}".format(state))

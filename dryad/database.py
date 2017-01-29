@@ -305,7 +305,7 @@ class DryadDatabase():
             cond = "c_source IS '{}' AND c_session_id IS {} AND c_ph IS NULL".format(source, session_id)
             lackingBluno = True 
         elif node_type == ble.NTYPE_PARROT:
-            cond = "c_source IS '{}' AND c_session_id IS {} AND c_soil_temp IS NULL".format(node_id, session_id)
+            cond = "c_source IS '{}' AND c_session_id IS {} AND c_soil_temp IS NULL".format(source, session_id)
             lackingParrot = True
 
         # Retrieving last row with no parrot XOR no bluno data

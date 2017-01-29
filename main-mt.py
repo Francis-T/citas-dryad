@@ -25,7 +25,7 @@ MAX_TRIAL_COUNT = 10
 MAX_SAMPLE_COUNT = 100
 SCANNING_INTERVAL = 600.0
 
-DEBUG_MODE = False
+DEBUG_MODE = True
 
 CUSTOM_DATABASE_NAME = "dryad_test_cache.db"
 
@@ -51,9 +51,8 @@ class InputThread(Thread):
                 self.hevent.set()
                 is_running = False
                 break
-
-            if (cmd == "START"):
-                self.queue.put("ACTIVATE")
+            else:
+                self.queue.put(cmd)
                 self.hevent.set()
 
         return

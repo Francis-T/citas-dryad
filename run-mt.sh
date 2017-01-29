@@ -12,7 +12,7 @@ then
         echo -n .;
     done;
 fi;
-echo "Done."
+echo $'\nDone.'
 
 cd $CACHE_NODE_HOME
 
@@ -46,6 +46,6 @@ echo "Script finished. "
 if [ $RES_CODE -eq 2 ];
 then
     echo "Shutting down now";
-#    sudo shutdown -h now
+    sudo shutdown -h now
 fi;
 
