@@ -159,6 +159,10 @@ class RequestHandler():
             "updated"   : None,
         }
 
+        # remove trailing ";" 
+        if ";" in content:
+            content = content[:-1]
+
         update_args = content.split(',')
         
         if len(update_args) > 0:

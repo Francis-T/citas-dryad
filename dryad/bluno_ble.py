@@ -35,6 +35,7 @@ DFR_BDR_STR = str(bytearray(b"AT+CURRUART=115200\r\n"))
 
 class ReadCompleteTask(Thread):
     def __init__(self, event, delay=0.0):
+        Thread.__init__(self)
         self.hevent = event
         self.delay = delay
         return
@@ -58,11 +59,13 @@ class PeripheralDelegate(DefaultDelegate):
 
         self.is_reading = True
         self.continue_read = 14
+        self.rct = None
 
         return
 
     def handleNotification(self, cHandle, data):
         data = str(data)
+        self.logger.debug("Received: ".format(data))
         if cHandle is SERIAL_HDL:
             if "RUNDP:OK" in data:
                 self.logger.info("Bluno: Undeployed")
@@ -228,15 +231,17 @@ class Bluno():
         while self.pdelegate.should_continue_read():
             self.pdevice.waitForNotifications(2.0)
             ns += 1
-            self.logger.info("ns={}".format(ns))
 
         self.logger.info("Finished QREAD")
 
         # TODO Workaround for triggering the data collection wait event.
         #      Eventually, the entire contents of this function would
         #      be on its own thread
-        rct = ReadCompleteTask(self.hevent, 2.0)
-        rct.start()
+        self.rct = ReadCompleteTask(self.hevent, 2.0)
+        self.rct.start()
+
+        self.req_undeploy(serial_ch)
+        self.pdevice.waitForNotifications(1.0)
 
         return True
 

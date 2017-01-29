@@ -9,7 +9,7 @@ import os
 
 from json import dumps
 from bluepy.btle import Scanner
-from threading import Thread, Event
+from threading import Thread, Event, active_count
 from time import sleep, time
 from dryad.database import DryadDatabase
 from dryad.bluno_ble import Bluno
@@ -85,6 +85,7 @@ class ReadCompletionWaitTask(Thread):
                 del unstarted_tasks[0]
 
         self.logger.debug("All threads finished")
+        self.logger.debug("    > Active Threads: {}".format(str(active_count())))
         self.cnode.notify_read_completion()
 
         return
@@ -156,6 +157,7 @@ class ReadNodeTask(Thread):
             self.node_readings = self.collect_node_data(self.node_instance, self.node_read_event)
         except Exception as e:
             self.logger.error("Exception occurred: {}".format(e))
+            self.logger.exception(e)
             self.node_readings = None
 
         if self.node_readings == None:
@@ -190,6 +192,9 @@ class ReadNodeTask(Thread):
             self.add_data(content=dumps(data), 
                           source=self.node_ref['id'], 
                           timestamp=read_time)
+            
+        self.cancel()
+
         return
 
     def is_started(self):
