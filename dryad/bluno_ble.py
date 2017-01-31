@@ -3,6 +3,7 @@ from threading import Event, Thread
 from collections import defaultdict 
 from time import sleep, time
 
+import utils.transform as transform
 import datetime
 import traceback
 import numpy as np
@@ -26,8 +27,9 @@ DEVINFO_CHARS = {
 }
 
 SERIAL_HDL = 37
-
 MAX_CONN_RETRIES = 10
+
+DEBUG_RAW_DATA = False
 
 # Security variables
 DFR_PWD_STR = str(bytearray(b"AT+PASSWOR=DFRobot\r\n"))
@@ -87,12 +89,18 @@ class PeripheralDelegate(DefaultDelegate):
                 if self.is_reading == False:
                     return
 
+                tr = transform.DataTransformation()
+                
                 ph_data = data.split("=")[1].split(";")[0].strip()
+
+                if DEBUG_RAW_DATA == False:
+                    ph_data = tr.conv_ph(float(ph_data)) 
+
                 self.readings = np.append( self.readings,
                                            { "PH": ph_data,
                                              "ts" : int(time()) } )
                 # self.readings = np.append( self.readings, float(data.split("=")[1].split(";")[0].strip()))
-                self.logger.info( "[BLUNO] pH = {}".format(ph_data) )
+                self.logger.info( "[BLUNO] pH = {0:.2f}".format(ph_data) )
 
                 # Decrease the number of readings
                 self.readings_left -= 1

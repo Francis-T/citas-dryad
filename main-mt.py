@@ -19,8 +19,7 @@ from dryad.node_state import NodeState
 
 VERSION  = "1.0.2"
 TRIG_EVENT_TIMEOUT = 120.0
-SAMPLING_INTERVAL = 60.0 * 5.0
-#SAMPLING_INTERVAL = 240.0
+SAMPLING_INTERVAL = 60.0 * 2.0
 MAX_TRIAL_COUNT = 10
 MAX_SAMPLE_COUNT = 100
 SCANNING_INTERVAL = 600.0
@@ -107,6 +106,7 @@ def main():
     global trig_event
     global queue
     global state
+    global SAMPLING_INTERVAL
 
     trig_event = Event()
     queue = Queue()
@@ -165,6 +165,11 @@ def main():
                     sampling_timer.cancel()
                 state.set_state("INACTIVE")
 
+            elif msg == "SET_PARAMS":
+                cache_node.set_node_sample_max()
+                cache_node.set_node_sampling_duration()
+                SAMPLING_INTERVAL = cache_node.get_sampling_interval()
+                
             elif msg == "SHUTDOWN":
                 state.set_state("UNKNOWN")
                 exit_code = EXIT_POWEROFF

@@ -58,7 +58,7 @@ MAX_SENSOR_READINGS = 250
 FLAG_NOTIF_ENABLE   = "\x01\x00"
 FLAG_NOTIF_DISABLE  = "\x00\x00"
 
-DEBUG_RAW_DATA = True
+DEBUG_RAW_DATA = False
 
 READ_FREQ = 20.0
 
@@ -93,6 +93,7 @@ class ReadThread(Thread):
 
         try:
             self.perform_read()
+
         except Exception as e:
             self.logger.error("Exception occurred: " + str(e))
 
@@ -105,21 +106,25 @@ class ReadThread(Thread):
         return True
 
     def perform_read(self):
-        while self.should_continue_read():
-            # Retrieve the readings
-            reading = self.pdevice.read_sensors(sensors=["SUNLIGHT", "SOIL_EC", "SOIL_TEMP", "AIR_TEMP", "VWC", "CAL_VWC", "CAL_AIR_TEMP", "CAL_DLI", "CAL_EA", "CAL_ECB", "CAL_EC_POROUS", "BATTERY"])
-            if (reading == None):
-                return
-            
-            out_str = "[{}] ".format(self.pdevice.ble_name)
-            for key, val in reading.items():
-                out_str += "{} = {:.2f}, ".format(key, val)
+        try: 
+            while self.should_continue_read():
+                # Retrieve the readings
+                reading = self.pdevice.read_sensors(sensors=["SUNLIGHT", "SOIL_EC", "SOIL_TEMP", "AIR_TEMP", "VWC", "CAL_VWC", "CAL_AIR_TEMP", "CAL_DLI", "CAL_EA", "CAL_ECB", "CAL_EC_POROUS", "BATTERY"])
+                if (reading == None):
+                    return
+                
+                out_str = "[{}] ".format(self.pdevice.ble_name)
+                for key, val in reading.items():
+                    out_str += "{} = {:.2f}, ".format(key, val)
 
-            self.logger.info(out_str)
+                self.logger.info(out_str)
 
-            self.readings.append( reading )
-            self.readings_left -= 1
-            sleep(READ_FREQ)
+                self.readings.append( reading )
+                self.readings_left -= 1
+                sleep(READ_FREQ)
+
+        except Exception as e:
+            self.logger.exception(e)
 
         return
 
@@ -319,10 +324,10 @@ class Parrot():
                             reading[key] = tr.conv_temp(tr.unpack_U16(char.read()))
                         elif key == "VWC":
                             reading[key] = tr.conv_moisture(tr.unpack_U16(char.read()))
-                    else:
-                        reading[key] = tr.decode_float32(char.read())
-                except:
-                    self.logger.error("Failed to read and decode sensor data: " + str(char))
+                        else:
+                            reading[key] = tr.decode_float32(char.read())
+                except Exception as e:
+                    self.logger.error("Failed to read and decode sensor data: " + str(char.read()))
 
         reading['ts'] = int(time())
         self.switch_led(FLAG_NOTIF_DISABLE)

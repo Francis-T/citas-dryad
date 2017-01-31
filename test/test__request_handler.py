@@ -58,6 +58,7 @@ class TestSuite():
 
         test_inputs = [
            "QCUPD:name='francis.t',lat=14.37,lon=120.58,site_name='CITAS-Ateneo';",
+           "QASCP:interval=120,duration=90,max_samples=1000",
            "QACTV:;",
            "QSTAT:;",
            "QQRSN:name='SN77',pf_addr='001122334455',bl_addr='55AA33221100',state='AOK',lat=14.37,lon=120.58,updated=123213124;",

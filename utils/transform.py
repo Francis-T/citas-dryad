@@ -8,6 +8,9 @@ class DataTransformation():
     def decode_float32(self, val):
         return struct.unpack('f', val)[0]
 
+    def conv_ph(self, val):
+        return val * 2.2570 + 2.6675
+
     def conv_temp(self, val):
         dec_val = 0.00000003044 * pow(val, 3.0) - 0.00008038 * pow(val, 2.0) + val * 0.1149 - 30.449999999999999
         if dec_val < -10.0:

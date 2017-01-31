@@ -11,7 +11,7 @@ import json
 import dryad.custom_ble as ble
 
 DEFAULT_DB_NAME = "dryad_cache.db"
-DEFAULT_GET_COND = "c_content IS NOT NULL"
+DEFAULT_GET_COND = "td.c_id IS NOT NULL"
 
 module_logger = logging.getLogger("main.database")
 
@@ -97,7 +97,7 @@ class DryadDatabase():
         columns += "c_session_id    INTEGER, "
         columns += "c_source        VARCHAR, "
         columns += "c_dest          VARCHAR, "
-        columns += "c_content       VARCHAR, "
+        #columns += "c_content       VARCHAR, "
         ## Adding columns for an column-based content 
         columns += "c_sunlight      FLOAT(8), "
         columns += "c_soil_temp     FLOAT(8), "
@@ -173,6 +173,25 @@ class DryadDatabase():
         # And execute it using our database connection 
         return self.perform(query)
 
+    # @desc     Setup the collection parameters table
+    # @return   A boolean indicating success or failure
+    def setup_collection_parameters(self):
+        # Identify our target table
+        table_name = "t_params"
+        
+        # Build up our columns
+        columns =  ""
+        columns += "c_id            INTEGER PRIMARY KEY, "
+        columns += "c_duration      FLOAT(5), "
+        columns += "c_interval      FLOAT(5), "
+        columns += "c_max_samples   INTEGER "
+
+        # Finally, build our query
+        query = "CREATE TABLE {} ({});".format(table_name, columns)
+
+        # And execute it using our database connection
+        return self.perform(query)
+
     # @desc     Setup the entire database
     # @return   A boolean indicating success or failure
     def setup(self):
@@ -200,6 +219,10 @@ class DryadDatabase():
 
         if self.setup_node_devices_table() == False:
             self.logger.error("Database setup failed: Node Devices")
+            return False
+
+        if self.setup_collection_parameters() == False:
+            self.logger.error("Database setup failed: Collection Parameters")
             return False
 
         if self.setup_data_cache_table() == False:
@@ -324,18 +347,35 @@ class DryadDatabase():
         table_name = "t_data_cache"
         # Varying insert values and query depending from the data source
         if node_type == ble.NTYPE_BLUNO:
-            columns = "c_session_id, c_source, c_dest, c_content, c_ph, c_upload_time"
-            values = (session_id, source, dest, str(content), content["PH"], str( int(time.time()) )) 
-            query = "INSERT INTO {} ({}) VALUES (?, ?, ?, ?, ?, ?);".format(table_name, columns)
+            columns = "c_session_id, c_source, c_dest, c_ph, c_upload_time"
+            values = (session_id, source, dest, content["PH"], str( int(time.time()) )) 
+            query = "INSERT INTO {} ({}) VALUES (?, ?, ?, ?, ?);".format(table_name, columns)
         elif node_type == ble.NTYPE_PARROT:
-            columns = "c_session_id, c_source, c_dest, c_content, c_sunlight, c_soil_temp,"
+            columns = "c_session_id, c_source, c_dest, c_sunlight, c_soil_temp,"
             columns += "c_air_temp, c_cal_air_temp, c_vwc, c_cal_vwc, c_soil_ec, c_cal_ec_porous,"
             columns += "c_cal_ea, c_cal_ecb, c_cal_dli, c_upload_time"
-            values = (session_id, source, dest, str(content), content["SUNLIGHT"], content["SOIL_TEMP"], content["AIR_TEMP"], content["CAL_AIR_TEMP"], content["VWC"], content["CAL_VWC"], content["SOIL_EC"], content["CAL_EC_POROUS"], content["CAL_EA"], content["CAL_ECB"], content["CAL_DLI"], str( int(time.time()) )) 
-            query = "INSERT INTO {} ({}) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?);".format(table_name, columns)
+            values = (session_id, source, dest, content["SUNLIGHT"], content["SOIL_TEMP"], content["AIR_TEMP"], content["CAL_AIR_TEMP"], content["VWC"], content["CAL_VWC"], content["SOIL_EC"], content["CAL_EC_POROUS"], content["CAL_EA"], content["CAL_ECB"], content["CAL_DLI"], str( int(time.time()) )) 
+            query = "INSERT INTO {} ({}) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?);".format(table_name, columns)
 
         # And execute it using our database connection 
         return self.perform(query, values)
+    
+    # @desc     Adds / Updates a new collection parameter settings
+    # @return   A boolean indicating success or failure
+    def add_collection_parameters(self, duration, interval, max_samples):
+        if not self.dbconn:
+            return False
+
+        table_name = "t_params"
+        columns = "c_duration, c_interval, c_max_samples"
+        values = (duration, interval, max_samples) 
+
+        # Build our INSERT query 
+        query = "INSERT INTO {} ({}) VALUES (?, ?, ?);".format(table_name, columns)
+
+        # And execute it using our database connection 
+        return self.perform(query, values)
+
 
     ##*************************************##
     ##  SEC03: Record Retrieval Functions  ##
@@ -365,7 +405,24 @@ class DryadDatabase():
             return None
 
         return result[0][0]
+        
+    # @desc     Gets the latest collection parameter settings
+    # @return   A boolean indicating success or failure
+    def get_latest_collection_parameters(self):
+        table = "t_params"
+        columns = "c_duration, c_interval, c_max_samples"
+       
+        query = "SELECT {} from {} ORDER BY c_id DESC LIMIT 1".format(table, columns)
 
+        result = self.perform(query)
+        if result == True or result == False:
+            return None
+
+        if len(result) == 0:
+            return None
+
+        return result[0][0]
+        
     # @desc     Retrieve data from the t_data_cache table in our database with the ff
     #           constraints on row return limit, row offset, and filter condition
     # @return   A boolean indicating success or failure
@@ -381,7 +438,7 @@ class DryadDatabase():
         table_name = "t_data_cache AS td JOIN t_session AS ts ON td.c_session_id IS ts.c_id "
         table_name += "JOIN t_node AS tn ON tn.c_node_id IS td.c_source JOIN t_node_device AS "
         table_name += "tnd ON tnd.c_node_id IS tn.c_node_id"
-        columns = "td.c_id, td.c_source, ts.c_end_time, td.c_content, td.c_dest, td.c_ph, "
+        columns = "td.c_id, td.c_source, ts.c_end_time, td.c_dest, td.c_ph, "
         columns += "td.c_sunlight, td.c_soil_temp, td.c_air_temp, td.c_cal_air_temp, td.c_vwc, "
         columns += "td.c_cal_vwc, td.c_soil_ec, td.c_cal_ec_porous, td.c_cal_ea, td.c_cal_ecb, "
         columns += "td.c_cal_dli, tnd.c_node_id, tnd.c_lat, tnd.c_lon" 

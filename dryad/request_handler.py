@@ -67,6 +67,45 @@ class RequestHandler():
        
         return link.send_response("RDEAC:OK;\r\n")
 
+    def handle_req_add_collection_params(self, link, content):
+        # remove trailing ";" 
+        if ";" in content:
+            content = content[:-1]
+
+        params_args = content.split(',')
+
+        # Parse our argument list
+        if len(params_args) > 0:
+            for arg in params_args:
+                if arg.lower().startswith("duration="):
+                    duration = int(arg.split('=')[1])
+
+                elif arg.lower().startswith("interval="):
+                    interval = int(arg.split('=')[1])
+
+                elif arg.lower().startswith("max_samples="):
+                    max_samples = int(arg.split('=')[1])
+        
+            db = DryadDatabase()
+            if db.connect(self.dbname) == False:
+                return False
+            
+            result = db.add_collection_parameters(duration, interval, max_samples)
+
+            if result == False:
+                self.logger.error("Failed to add_collection_parameters")
+                link.send_response("QASCP:FAIL;\r\n")
+                return False
+            
+        # Add an activation request to the main cache node queue
+        self.queue.put("SET_PARAMS")
+
+        # And trigger the event handler
+        self.hevent.set()
+
+        
+        return link.send_response("RASCP:OK;\r\n")
+
     def handle_req_update_cache(self, link, content):
         params = {
             "name"      :   None, 
@@ -311,23 +350,23 @@ class RequestHandler():
             "id"            : 0,
             "source"        : 1,
             "end_time"      : 2,
-            "content"       : 3,
-            "dest"          : 4,
-            "ph"            : 5,
-            "sunlight"      : 6,
-            "soil_temp"     : 7,
-            "air_temp"      : 8,
-            "cal_air_temp"  : 9,
-            "vwc"           : 10,
-            "cal_vwc"       : 11,
-            "soil_ec"       : 12,
-            "cal_ec_porous" : 13,
-            "cal_ea"        : 14,
-            "cal_ecb"       : 15,
-            "cal_dli"       : 16,
-            "node_id"       : 17,
-            "lat"           : 18,
-            "lon"           : 19
+            #"content"       : 3,
+            "dest"          : 3,
+            "ph"            : 4,
+            "sunlight"      : 5,
+            "soil_temp"     : 6,
+            "air_temp"      : 7,
+            "cal_air_temp"  : 8,
+            "vwc"           : 9,
+            "cal_vwc"       : 10,
+            "soil_ec"       : 11,
+            "cal_ec_porous" : 12,
+            "cal_ea"        : 13,
+            "cal_ecb"       : 14,
+            "cal_dli"       : 15,
+            "node_id"       : 16,
+            "lat"           : 17,
+            "lon"           : 18
         }
 
         download_args = content.split(',')
@@ -424,6 +463,12 @@ class RequestHandler():
         elif req_hdr == "QDEAC":
             # Deactivate Cache Node request
             if self.handle_req_deactivate(link, req_content) == False:
+                self.logger.error("Failed to handle {} request".format(req_hdr))
+                return False
+
+        elif req_hdr == "QASCP":
+            # Add new sampling collection parameters
+            if self.handle_req_add_collection_params(link, req_content) == False:
                 self.logger.error("Failed to handle {} request".format(req_hdr))
                 return False
 

@@ -393,12 +393,26 @@ class CacheNode():
         self.logger.debug("No threads to cancel")
         return
 
-    def set_node_sample_max(self, count):
+    def set_node_sample_max(self, count=None):
         self.node_max_samples = count
+        if count == None:
+            ddb = DryadDatabase()
+            if ddb.connect(self.db_name) == False:
+                self.logger.error("Failed to connect to database")
+                return False
+
+            self.node_max_samples = ddb.get_latest_collection_parameters()[2]
         return self.node_max_samples
 
-    def set_node_sampling_duration(self, duration):
+    def set_node_sampling_duration(self, duration=None):
         self.node_sampling_duration = duration
+        if duration == None:
+            ddb = DryadDatabase()
+            if ddb.connect(self.db_name) == False:
+                self.logger.error("Failed to connect to database")
+                return False
+
+            self.node_sampling_duration = ddb.get_latest_collection_parameters()[0]
         return self.node_sampling_duration
 
     def get_node_sample_max(self):
@@ -406,6 +420,13 @@ class CacheNode():
 
     def get_node_sampling_duration(self):
         return self.node_sampling_duration
+    
+    def get_sampling_interval(self):
+        ddb = DryadDatabase()
+        if ddb.connect(self.db_name) == False:
+            self.logger.error("Failed to connect to the database")
+            return False
+        return ddb.get_latest_collection_parameters()[1]
 
     # @desc     Notifies the cache node of read completion
     # @return   None
