@@ -350,7 +350,6 @@ class RequestHandler():
             "id"            : 0,
             "source"        : 1,
             "end_time"      : 2,
-            #"content"       : 3,
             "dest"          : 3,
             "ph"            : 4,
             "sunlight"      : 5,
@@ -378,11 +377,9 @@ class RequestHandler():
                     limit = int(arg.split('=')[1])
 
                 elif arg.lower().startswith("start_id="):
-                    # TODO Not yet used!
                     start_id = int(arg.split('=')[1])
 
                 elif arg.lower().startswith("end_id="):
-                    # TODO Not yet used!
                     end_id = int(arg.split('=')[1])
 
                 elif arg.lower().startswith("unsent_only="):
@@ -397,11 +394,12 @@ class RequestHandler():
         db = DryadDatabase()
         if db.connect(self.dbname) == False:
             return False
-
+        
+        # Default limit for now is 3
         if limit == None:
             limit = 3
-
-        records = db.get_data(limit=limit, summarize=False)
+            
+        records = db.get_data(limit=limit, summarize=False, start_id=start_id, end_id=end_id)
         proc_ids = []
         resp_data = []
 

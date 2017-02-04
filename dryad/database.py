@@ -426,7 +426,7 @@ class DryadDatabase():
     # @desc     Retrieve data from the t_data_cache table in our database with the ff
     #           constraints on row return limit, row offset, and filter condition
     # @return   A boolean indicating success or failure
-    def get_data(self, session_id=None, node_id=None, limit=0, offset=0, cond=DEFAULT_GET_COND, summarize=False, lacksParrot=False, lacksBluno=False):
+    def get_data(self, session_id=None, node_id=None, limit=0, offset=0, start_id=None, end_id=None, cond=DEFAULT_GET_COND, summarize=False, lacksParrot=False, lacksBluno=False):
         if not self.dbconn:
             return False
 
@@ -443,6 +443,14 @@ class DryadDatabase():
         columns += "td.c_cal_vwc, td.c_soil_ec, td.c_cal_ec_porous, td.c_cal_ea, td.c_cal_ecb, "
         columns += "td.c_cal_dli, tnd.c_node_id, tnd.c_lat, tnd.c_lon" 
         
+        # Add condition if start_id is not none
+        if start_id != None:
+            cond += " AND td.c_id >= %i" % (start_id)
+
+        # Add condition if end_id is not none
+        if end_id != None:
+            cond += " AND td.c_id <= %i" % (end_id) 
+
         query = "SELECT %s FROM %s WHERE %s ORDER BY td.c_id DESC" % (columns, table_name, cond)
 
         # Set our offset 
