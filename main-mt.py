@@ -20,6 +20,8 @@ from dryad.node_state import NodeState
 VERSION  = "1.0.2"
 TRIG_EVENT_TIMEOUT = 120.0
 SAMPLING_INTERVAL = 60.0 * 2.0
+AUTO_SHUTDOWN_INTERVAL = 60.0 * 30.0
+
 MAX_TRIAL_COUNT = 10
 MAX_SAMPLE_COUNT = 100
 SCANNING_INTERVAL = 600.0
@@ -92,6 +94,12 @@ def add_sampling_task():
     trig_event.set()
     return
 
+def add_shutdown_task()
+    logger.info("Time limit reached. Performing shutdown...")
+    queue.put("SHUTDOWN")
+    trig_event.set()
+    return
+
 # @desc     Main function
 # @return   An integer exit code:
 def main():
@@ -107,6 +115,7 @@ def main():
     global queue
     global state
     global SAMPLING_INTERVAL
+    global AUTO_SHUTDOWN_INTERVAL
 
     trig_event = Event()
     queue = Queue()
@@ -131,6 +140,10 @@ def main():
     # Create the Sampling Timer thread, but do not start it yet
     sampling_timer = Timer(SAMPLING_INTERVAL, add_sampling_task)
     #sampling_timer.start()
+
+    # Create the Auto Shutdown Timer thread
+    auto_shutdown_timer = Timer(AUTO_SHUTDOWN_INTERVAL, add_shutdown_task)
+    auto_shutdown_timer.start()
 
     # Initialize timing variables
     last_scan_time = 0.0
