@@ -94,7 +94,7 @@ def add_sampling_task():
     trig_event.set()
     return
 
-def add_shutdown_task()
+def add_shutdown_task():
     logger.info("Time limit reached. Performing shutdown...")
     queue.put("SHUTDOWN")
     trig_event.set()
