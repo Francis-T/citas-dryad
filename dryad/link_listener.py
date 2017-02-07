@@ -69,8 +69,12 @@ class LinkListenerThread(Thread):
             data_part = self.link.receive_data()
 
             if data_part is not None:
-                data_part = data_part.decode("utf-8")
-
+                try:
+                    data_part = data_part.decode("utf-8")
+                except:
+                    self.logger.error("Data not in utf-8 format")
+                    break
+   
             # If the data part contains nothing, then try to receive data
             #   again if the thread is still running
             if data_part == None:

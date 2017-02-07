@@ -365,8 +365,13 @@ class RequestHandler():
             "cal_dli"       : 15,
             "node_id"       : 16,
             "lat"           : 17,
-            "lon"           : 18
+            "lon"           : 18,
+            "site_name"     : 19,
+            "cache_id"      : 20,
         }
+ 
+        if ";" in content:
+            content = content[:-1]
 
         download_args = content.split(',')
 
@@ -400,21 +405,18 @@ class RequestHandler():
             limit = 3
             
         records = db.get_data(limit=limit, summarize=False, start_id=start_id, end_id=end_id)
-        proc_ids = []
         resp_data = []
 
-        # TODO Change sampling site value
         # Compose our response content
         for rec in records:
-            proc_ids.append( rec[0] )
-            self.logger.info(rec) 
             data = '"ph":"{}","sunlight":"{}","soil_temp":"{}","air_temp":"{}","cal_air_temp":"{}","vwc":"{}","cal_vwc":"{}","soil_ec":"{}","cal_ec_porous":"{}","cal_ea":"{}","cal_ecb":"{}","cal_dli":"{}"'.format( rec[idx["ph"]], rec[idx["sunlight"]], rec[idx["soil_temp"]], rec[idx["air_temp"]], rec[idx["cal_air_temp"]], rec[idx["vwc"]], rec[idx["cal_vwc"]], rec[idx["soil_ec"]], rec[idx["cal_ec_porous"]], rec[idx["cal_ea"]], rec[idx["cal_ecb"]], rec[idx["cal_dli"]] )
             origin = '"name":"{}","lat":"{}","lon":"{}"'.format(rec[idx["node_id"]], rec[idx["lat"]], rec[idx["lon"]])
             resp_data.append( {
+                "rec_id": rec[idx['id']],
                 "data" : json.loads("{" + data + "}"),
                 "origin": json.loads("{" + origin + "}"),
                 "timestamp" : rec[idx['end_time']],
-                "sampling_site" : "1"
+                "sampling_site" : rec[idx['site_name']]
             } )
         
         # Send our response
@@ -435,7 +437,7 @@ class RequestHandler():
         return True
 
     def handle_request(self, link, request):
-        # self.logger.info("Message received: {}".format(msg))
+        self.logger.info("Message received: {}".format(request))
 
         req_parts = request.split(':', 1)
 

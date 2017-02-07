@@ -97,7 +97,6 @@ class DryadDatabase():
         columns += "c_session_id    INTEGER, "
         columns += "c_source        VARCHAR, "
         columns += "c_dest          VARCHAR, "
-        #columns += "c_content       VARCHAR, "
         ## Adding columns for an column-based content 
         columns += "c_sunlight      FLOAT(8), "
         columns += "c_soil_temp     FLOAT(8), "
@@ -121,8 +120,6 @@ class DryadDatabase():
 
         # Finally, build our query 
         query = "CREATE TABLE {} ({});".format(table_name, columns)
-
-        # Debug Note: This is where you can opt to print out your query 
 
         # And execute it using our database connection 
         return self.perform(query)
@@ -426,7 +423,9 @@ class DryadDatabase():
     # @desc     Retrieve data from the t_data_cache table in our database with the ff
     #           constraints on row return limit, row offset, and filter condition
     # @return   A boolean indicating success or failure
-    def get_data(self, session_id=None, node_id=None, limit=0, offset=0, start_id=None, end_id=None, cond=DEFAULT_GET_COND, summarize=False, lacksParrot=False, lacksBluno=False):
+    def get_data(self, session_id=None, node_id=None, limit=0, offset=0, start_id=None, 
+                    end_id=None, unsent_only=False, cond=DEFAULT_GET_COND, summarize=False):
+
         if not self.dbconn:
             return False
 
@@ -441,8 +440,8 @@ class DryadDatabase():
         columns = "td.c_id, td.c_source, ts.c_end_time, td.c_dest, td.c_ph, "
         columns += "td.c_sunlight, td.c_soil_temp, td.c_air_temp, td.c_cal_air_temp, td.c_vwc, "
         columns += "td.c_cal_vwc, td.c_soil_ec, td.c_cal_ec_porous, td.c_cal_ea, td.c_cal_ecb, "
-        columns += "td.c_cal_dli, tnd.c_node_id, tnd.c_lat, tnd.c_lon" 
-        
+        columns += "td.c_cal_dli, tnd.c_node_id, tnd.c_lat, tnd.c_lon, tn.c_site_name " 
+
         # Add condition if start_id is not none
         if start_id != None:
             cond += " AND td.c_id >= %i" % (start_id)
@@ -450,14 +449,19 @@ class DryadDatabase():
         # Add condition if end_id is not none
         if end_id != None:
             cond += " AND td.c_id <= %i" % (end_id) 
-
-        query = "SELECT %s FROM %s WHERE %s ORDER BY td.c_id DESC" % (columns, table_name, cond)
-
-        # Set our offset 
-        if limit == 0:
-            query += ";"
+        
+        # TODO: Identify why query doesnt return distinct records
+        query = "SELECT DISTINCT %s FROM %s WHERE %s ORDER BY td.c_id DESC" % (columns, table_name, cond)
+        
+        # Add limit if no start_id and end_id are specified
+        if start_id == None and end_id == None:
+            # Set our offset 
+            if limit == 0:
+                query += ";"
+            else:
+                query += " LIMIT %i OFFSET %i;" % (limit, offset)
         else:
-            query += " LIMIT %i OFFSET %i;" % (limit, offset)
+            query += ";"
 
         cur = self.dbconn.cursor()
         result = None

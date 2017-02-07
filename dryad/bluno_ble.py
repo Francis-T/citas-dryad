@@ -48,8 +48,9 @@ class ReadCompleteTask(Thread):
         return
 
 class PeripheralDelegate(DefaultDelegate):
-    def __init__(self, pdevice, serial_ch, event, read_samples, read_until):
+    def __init__(self, pdevice, dvc_name, serial_ch, event, read_samples, read_until):
         DefaultDelegate.__init__(self)
+        self.ble_name = dvc_name
         self.pdevice = pdevice
         self.serial_ch = serial_ch
         self.hevent = event
@@ -67,7 +68,6 @@ class PeripheralDelegate(DefaultDelegate):
 
     def handleNotification(self, cHandle, data):
         data = str(data)
-        self.logger.debug("Received: ".format(data))
         if cHandle is SERIAL_HDL:
             if "RUNDP:OK" in data:
                 self.logger.info("Bluno: Undeployed")
@@ -100,7 +100,9 @@ class PeripheralDelegate(DefaultDelegate):
                                            { "PH": ph_data,
                                              "ts" : int(time()) } )
                 # self.readings = np.append( self.readings, float(data.split("=")[1].split(";")[0].strip()))
-                self.logger.info( "[BLUNO] pH = {0:.2f}".format(ph_data) )
+                ph_reading = "[{}]".format(self.ble_name)
+                ph_reading += " pH = {0:.2f}".format(ph_data)
+                self.logger.info( ph_reading )
 
                 # Decrease the number of readings
                 self.readings_left -= 1
@@ -216,6 +218,7 @@ class Bluno():
         # Setup the BLE peripheral delegate
         serial_ch = self.get_serial()
         self.pdelegate = PeripheralDelegate(self, 
+                                            dvc_name=self.ble_name,
                                             serial_ch=serial_ch,
                                             event=self.hevent,
                                             read_samples=self.max_samples,
