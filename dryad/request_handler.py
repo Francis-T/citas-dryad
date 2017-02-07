@@ -388,7 +388,6 @@ class RequestHandler():
                     end_id = int(arg.split('=')[1])
 
                 elif arg.lower().startswith("unsent_only="):
-                    # TODO Not yet used!
                     val = arg.split('=')[1]
                     if val == "True":
                         unsent_only = True
@@ -404,7 +403,7 @@ class RequestHandler():
         if limit == None:
             limit = 3
             
-        records = db.get_data(limit=limit, summarize=False, start_id=start_id, end_id=end_id)
+        records = db.get_data(limit=limit, summarize=False, start_id=start_id, end_id=end_id, unsent_only=unsent_only)
         resp_data = []
 
         # Compose our response content
@@ -427,6 +426,10 @@ class RequestHandler():
                 self.logger.error("Failed to send response")
                 db.disconnect()
                 return False
+            rows_sent = [records[idx]['rec_id'] for idx in range(len(records))]
+            if db.update_sent_rows(rows_sent) == True:
+                self.logger.debug("Updating rows sent successful")
+ 
         except:
             self.logger.error("Failed to send response due to an exception")
             db.disconnect()

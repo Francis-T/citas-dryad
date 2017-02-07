@@ -111,6 +111,7 @@ class DryadDatabase():
         columns += "c_cal_dli       FLOAT(8), "
         columns += "c_ph            FLOAT(8), "
         columns += "c_upload_time   LONG, "
+        columns += "c_is_sent       INTEGER DEFAULT 0, "
         columns += "FOREIGN KEY(c_session_id) "
         columns += "    REFERENCES t_session(c_id), "
         columns += "FOREIGN KEY(c_source) "
@@ -449,6 +450,9 @@ class DryadDatabase():
         # Add condition if end_id is not none
         if end_id != None:
             cond += " AND td.c_id <= %i" % (end_id) 
+
+        if unsent_only == True:
+            cond += " AND td.is_sent IS 0"
         
         # TODO: Identify why query doesnt return distinct records
         query = "SELECT DISTINCT %s FROM %s WHERE %s ORDER BY td.c_id DESC" % (columns, table_name, cond)
@@ -537,7 +541,6 @@ class DryadDatabase():
             return False
         
         update_map = [
-        #    ( 'c_node_id = "{}"',    node_id ),
             ( 'c_lat = {}',        lat ),
             ( 'c_lon = {}',        lon ),
             ( 'c_last_scanned = {}',    last_scanned),
@@ -755,6 +758,37 @@ class DryadDatabase():
 
         # And execute it using our database connection 
         return self.perform(query)
+
+    def update_sent_rows(self, row_ids=None):
+        if not self.dbconn:
+            return False
+
+        # Map function arguments to column update templates
+        update_map = [
+            ( 'c_is_sent = {}',   1 ),
+        ]
+        is_first = True
+
+        # Define the parts of our UPDATE query 
+        table_name = "t_data_cache"
+        update = ""
+        for template, value in update_map:
+            if not value == None:
+                if not is_first:
+                    update += ", "
+                else:
+                    is_first = False
+                
+                update += template.format(value)
+        
+        condition = 'c_id IN {}'.format(tuple(row_ids))
+
+        # Build our UPDATE query 
+        query = "UPDATE {} SET {} WHERE {}".format(table_name, update, condition)
+
+        # And execute it using our database connection 
+        return self.perform(query)
+
 
 
     def update_data(self, data_id=None, node_type=ble.NTYPE_PARROT, sunlight=None, soil_temp=None, air_temp=None, cal_air_temp=None, vwc=None, cal_vwc=None, soil_ec=None, cal_ec_porous=None, cal_ea=None, cal_ecb=None, cal_dli=None, ph=None):
