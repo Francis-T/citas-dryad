@@ -442,7 +442,8 @@ class DryadDatabase():
         columns += "td.c_sunlight, td.c_soil_temp, td.c_air_temp, td.c_cal_air_temp, td.c_vwc, "
         columns += "td.c_cal_vwc, td.c_soil_ec, td.c_cal_ec_porous, td.c_cal_ea, td.c_cal_ecb, "
         columns += "td.c_cal_dli, tnd.c_node_id, tnd.c_lat, tnd.c_lon, tn.c_site_name " 
-
+        
+        cond += " AND ts.c_end_time IS NOT NULL "
         # Add condition if start_id is not none
         if start_id != None:
             cond += " AND td.c_id >= %i" % (start_id)
