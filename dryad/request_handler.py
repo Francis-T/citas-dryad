@@ -417,7 +417,7 @@ class RequestHandler():
                 "timestamp" : rec[idx['end_time']],
                 "sampling_site" : rec[idx['site_name']]
             } )
-        
+
         # Send our response
         try:
             resp = json.dumps(resp_data)
@@ -426,14 +426,15 @@ class RequestHandler():
                 self.logger.error("Failed to send response")
                 db.disconnect()
                 return False
-            rows_sent = [records[idx]['rec_id'] for idx in range(len(records))]
-            if db.update_sent_rows(rows_sent) == True:
-                self.logger.debug("Updating rows sent successful")
- 
         except:
             self.logger.error("Failed to send response due to an exception")
             db.disconnect()
             return False
+      
+        if unsent_only == True:
+            rows_sent = [records[int(idx)][0] for idx in range(len(records))]
+            if db.update_sent_rows(rows_sent) == True:
+                self.logger.debug("Updating rows sent successful")
 
         db.disconnect()
 

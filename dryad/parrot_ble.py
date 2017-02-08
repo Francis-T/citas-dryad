@@ -1,4 +1,4 @@
-from bluepy.btle import DefaultDelegate, Peripheral, UUID
+from bluepy.btle import DefaultDelegate, Peripheral, UUID, BTLEException
 from threading import Event, Thread
 from collections import defaultdict
 from time import sleep, time
@@ -109,7 +109,15 @@ class ReadThread(Thread):
         try: 
             while self.should_continue_read():
                 # Retrieve the readings
-                reading = self.pdevice.read_sensors(sensors=["SUNLIGHT", "SOIL_EC", "SOIL_TEMP", "AIR_TEMP", "VWC", "CAL_VWC", "CAL_AIR_TEMP", "CAL_DLI", "CAL_EA", "CAL_ECB", "CAL_EC_POROUS", "BATTERY"])
+                reading = None
+
+                try:
+                    reading = self.pdevice.read_sensors(sensors=["SUNLIGHT", "SOIL_EC", "SOIL_TEMP", "AIR_TEMP", "VWC", 
+                                                                "CAL_VWC", "CAL_AIR_TEMP", "CAL_DLI", "CAL_EA", "CAL_ECB",
+                                                                "CAL_EC_POROUS", "BATTERY"])
+                except Exception as e:
+                    self.logger.exception(e)
+
                 if (reading == None):
                     return
                 
@@ -200,27 +208,27 @@ class Parrot():
 
             # Leave the loop immediately if we're already connected
             if ( is_connected ):
-                self.logger.debug("Overall connect time: {} secs".format(time() - start_time))
+                self.logger.debug("[{}] Overall connect time: {} secs".format(self.ble_name, time() - start_time))
                 break
 
             # Put out a warning and cut down retries if our connect attempt exceeds thresholds
             if ( elapsed_time > 35.0 ):
-                self.logger.debug("Connect attempt took {} secs".format(elapsed_time))
-                self.logger.warning("Connect attempt exceeds threshold. Is the device nearby?")
+                self.logger.debug("[{}] Connect attempt took {} secs".format(self.ble_name, elapsed_time))
+                self.logger.warning("[{}] Connect attempt exceeds threshold. Is the device nearby?".format(self.ble_name))
                 break
 
             retries += 1
 
             sleep(6.0 + 1.0 * retries)
-            self.logger.debug("Attempting to connect ({})...".format(retries))
+            self.logger.debug("[{}] Attempting to connect ({})...".format(self.ble_name, retries))
 
         # Check if connected
         if (is_connected == False):
             self.is_connected = False
-            self.logger.error("Failed to connect to device")
+            self.logger.error("[{}] Failed to connect to device".format(self.ble_name))
         else:
             self.is_connected = True
-            self.logger.info("Connected.")
+            self.logger.info("[{}] Connected.".format(self.ble_name))
 
         return self.is_connected
 
@@ -239,6 +247,7 @@ class Parrot():
     # @desc     Stops an ongoing sensor read operation
     # @return   A boolean indicating success or failure
     def stop(self):
+        self.logger.debug("Stop called for {}".format(self.ble_name))
         if (self.is_connected == False):
             self.logger.info("Already stopped")
             return True
@@ -342,6 +351,7 @@ class Parrot():
         while temp_counter != 0:
             readings = np.append(readings, self.read_sensors())
             temp_counter -= 1    
+            sleep(1.0)
         
         aggregated_data = defaultdict(int)
         for entry in readings:    

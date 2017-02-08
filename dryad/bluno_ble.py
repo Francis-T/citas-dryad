@@ -93,8 +93,19 @@ class PeripheralDelegate(DefaultDelegate):
                 
                 ph_data = data.split("=")[1].split(";")[0].strip()
 
-                if DEBUG_RAW_DATA == False:
-                    ph_data = tr.conv_ph(float(ph_data)) 
+                try:
+                    if DEBUG_RAW_DATA == False:
+                            ph_data = tr.conv_ph(float(ph_data)) 
+                except:
+                    self.logger.error("Cannot convert ph data ({}) to float".format(ph_data))
+
+                    # Once the desired limit of readings are reached, trigger the
+                    #   handle event to signal that the contents can now be taken
+                    if (self.should_continue_read() == False):
+                        self.is_reading = False
+                        self.hevent.set()
+
+                    return
 
                 self.readings = np.append( self.readings,
                                            { "PH": ph_data,
@@ -162,7 +173,7 @@ class Bluno():
     # @desc     Manually triggers connection to this sensor
     # @return   A boolean indicating success or failure
     def connect(self):
-        self.logger.info("Attempting to connect to {} [{}]".format(self.ble_name, self.ble_addr))
+        self.logger.info("[{}] Attempting to connect to [{}]".format(self.ble_name, self.ble_addr))
         retries = 0
 
         # Attempt to connect to the peripheral device a few times
@@ -181,19 +192,19 @@ class Bluno():
 
             # Leave the loop immediately if we're already connected
             if ( is_connected ):
-                self.logger.debug("Overall connect time: {} secs".format(time() - start_time))
+                self.logger.debug("[{}] Overall connect time: {} secs".format(self.ble_name, time() - start_time))
                 break
 
             # Put out a warning and cut down retries if our connect attempt exceeds thresholds
             if ( elapsed_time > 30.0 ):
-                self.logger.debug("Connect attempt took {} secs".format(elapsed_time))
-                self.logger.warning("Connect attempt exceeds threshold. Is the device nearby?")
+                self.logger.debug("[{}] Connect attempt took {} secs".format(self.ble_name, elapsed_time))
+                self.logger.warning("[{}] Connect attempt exceeds threshold. Is the device nearby?".format(self.ble_name))
                 break
 
             retries += 1
 
-            sleep(6.0 + 1.0 * retries)
-            self.logger.info("Attempting to connect ({})...".format(retries))
+            sleep(6.0 + 1.2 * retries)
+            self.logger.info("[{}] Attempting to connect ({})...".format(self.ble_name, retries))
 
         # Check if connected
         if (is_connected == False):

@@ -29,7 +29,7 @@ class TestSuite():
         return
 
     def setup(self):
-        db_name = "test.db"
+        db_name = "dryad_test_cache.db"
         version = "1.1"
 
         self.link = DummyLink()
@@ -57,25 +57,26 @@ class TestSuite():
         self.setup()
 
         test_inputs = [
-           "QCUPD:name='francis.t',lat=14.37,lon=120.58,site_name='CITAS-Ateneo';",
-           "QASCP:interval=120,duration=90,max_samples=1000",
-           "QACTV:;",
-           "QSTAT:;",
-           "QQRSN:name='SN77',pf_addr='001122334455',bl_addr='55AA33221100',state='AOK',lat=14.37,lon=120.58,updated=123213124;",
-           "QQRSN:name='SN78',pf_addr='007777777777',bl_addr='777733221100',state='AOK',lat=14.37,lon=120.58,updated=123213124;",
-           "QNLST:;",
-           "QSUPD:name='SN78',site_name=\"CITAS\",state='NOK',lat=14.37,lon=120.58;",
-           "QNLST:;",
-           "QDLTE:rpi_name='LEGO',sn_name='SN77';",
-           "QNLST:;",
-           "QDLTE:rpi_name='LEGO',sn_name='SN78';",
-           "QNLST:;",
-           "QQRSN:name='SN77',pf_addr='001122334455',bl_addr='55AA33221100',state='AOK',lat=14.37,lon=120.58,updated=123213124;",
-           "QQRSN:name='SN78',pf_addr='007777777777',bl_addr='777733221100',state='AOK',lat=14.37,lon=120.58,updated=123213124;",
-           "QNLST:;",
+#           "QCUPD:name='francis.t',lat=14.37,lon=120.58,site_name='CITAS-Ateneo';",
+#           "QASCP:interval=120,duration=90,max_samples=1000",
+#           "QACTV:;",
+#           "QSTAT:;",
+#           "QQRSN:name='SN77',pf_addr='001122334455',bl_addr='55AA33221100',state='AOK',lat=14.37,lon=120.58,updated=123213124;",
+#           "QQRSN:name='SN78',pf_addr='007777777777',bl_addr='777733221100',state='AOK',lat=14.37,lon=120.58,updated=123213124;",
+#           "QNLST:;",
+#           "QSUPD:name='SN78',site_name=\"CITAS\",state='NOK',lat=14.37,lon=120.58;",
+#           "QNLST:;",
+#           "QDLTE:rpi_name='LEGO',sn_name='SN77';",
+#           "QNLST:;",
+#           "QDLTE:rpi_name='LEGO',sn_name='SN78';",
+#           "QNLST:;",
+#           "QQRSN:name='SN77',pf_addr='001122334455',bl_addr='55AA33221100',state='AOK',lat=14.37,lon=120.58,updated=123213124;",
+#           "QQRSN:name='SN78',pf_addr='007777777777',bl_addr='777733221100',state='AOK',lat=14.37,lon=120.58,updated=123213124;",
+#           "QNLST:;",
            "QDATA:;",
-           "QDEAC:;",
-           "QPWDN:;"
+           "QDATA:unsent_only=True;",
+#           "QDEAC:;",
+#           "QPWDN:;"
         ]
 
         # Execute tests

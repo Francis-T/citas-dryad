@@ -452,7 +452,7 @@ class DryadDatabase():
             cond += " AND td.c_id <= %i" % (end_id) 
 
         if unsent_only == True:
-            cond += " AND td.is_sent IS 0"
+            cond += " AND td.c_is_sent IS 0"
         
         # TODO: Identify why query doesnt return distinct records
         query = "SELECT DISTINCT %s FROM %s WHERE %s ORDER BY td.c_id DESC" % (columns, table_name, cond)
@@ -765,7 +765,7 @@ class DryadDatabase():
 
         # Map function arguments to column update templates
         update_map = [
-            ( 'c_is_sent = {}',   1 ),
+            ( 'c_is_sent = {}',   1),
         ]
         is_first = True
 
@@ -785,11 +785,9 @@ class DryadDatabase():
 
         # Build our UPDATE query 
         query = "UPDATE {} SET {} WHERE {}".format(table_name, update, condition)
-
+        self.logger.debug(query)
         # And execute it using our database connection 
         return self.perform(query)
-
-
 
     def update_data(self, data_id=None, node_type=ble.NTYPE_PARROT, sunlight=None, soil_temp=None, air_temp=None, cal_air_temp=None, vwc=None, cal_vwc=None, soil_ec=None, cal_ec_porous=None, cal_ea=None, cal_ecb=None, cal_dli=None, ph=None):
         

@@ -55,7 +55,7 @@ class ReadCompletionWaitTask(Thread):
         self.logger.debug("Waiting for threads to finish...") 
         for t in self.read_threads:
             self.logger.debug("Waiting for thread to finish: {}".format(t.name)) 
-            t.join(10.0 * 60.0)
+            t.join(15.0 * 60.0)
 
             if (t.is_alive() == True):
                 self.logger.debug("Join timeout exceeded: {}".format(t.name))
@@ -234,7 +234,7 @@ class ReadNodeTask(Thread):
         if (res == False):
             return None
 
-        event.wait(240.0)
+        event.wait(self.sampling_duration * 2.0)
         event.clear()
 
         node.stop()
@@ -274,8 +274,7 @@ class CacheNode():
         self.msg_queue = queue
 
         self.node_max_samples = 5000
-        self.node_sampling_duration = 60.0 * 1.5
-
+        self.node_sampling_duration = 60.0 * 5.0
         return
 
     ## ----------------------- ##
@@ -360,7 +359,7 @@ class CacheNode():
 
             # Run tasks now only if our current number of running tasks does
             #   not yet exceed the limit of simultaneous BT connections
-            if count_running_tasks <= MAX_CONCUR_CONN:
+            if count_running_tasks < MAX_CONCUR_CONN:
                 t.start()
                 count_running_tasks += 1
 
