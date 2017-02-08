@@ -457,16 +457,14 @@ class DryadDatabase():
         # TODO: Identify why query doesnt return distinct records
         query = "SELECT DISTINCT %s FROM %s WHERE %s ORDER BY td.c_id DESC" % (columns, table_name, cond)
         
-        # Add limit if no start_id and end_id are specified
-        if start_id == None and end_id == None:
-            # Set our offset 
-            if limit == 0:
-                query += ";"
-            else:
-                query += " LIMIT %i OFFSET %i;" % (limit, offset)
-        else:
+        ## Add limit if no start_id and end_id are specified
+        #if start_id == None and end_id == None:
+        # Set our offset 
+        if limit == 0:
             query += ";"
-
+        else:
+            query += " LIMIT %i OFFSET %i;" % (limit, offset)
+       
         cur = self.dbconn.cursor()
         result = None
         try:
