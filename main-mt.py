@@ -20,7 +20,7 @@ from dryad.node_state import NodeState
 VERSION  = "1.0.3"
 TRIG_EVENT_TIMEOUT = 120.0
 SAMPLING_INTERVAL = 60.0 * 60.0
-AUTO_SHUTDOWN_INTERVAL = 60.0 * 30.0
+AUTO_SHUTDOWN_INTERVAL = 60.0 * 20.0
 
 MAX_TRIAL_COUNT = 10
 MAX_SAMPLE_COUNT = 100
@@ -209,8 +209,8 @@ def main():
                 # Queue up another sampling task
                 # sampling_timer = Timer(SAMPLING_INTERVAL, add_sampling_task)
                 # sampling_timer.start()
-                exit_code = EXIT_POWEROFF
-                break
+                #exit_code = EXIT_POWEROFF
+                #break
 
             elif msg == "SAMPLING_END":
                 state.set_state("IDLE")

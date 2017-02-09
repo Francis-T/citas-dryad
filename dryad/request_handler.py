@@ -403,7 +403,7 @@ class RequestHandler():
         if limit == None:
             limit = 3
             
-        records = db.get_data(limit=limit, summarize=False, start_id=start_id, end_id=end_id, unsent_only=unsent_only)
+        records = db.get_data(limit=limit, summarize=False, start_id=start_id, end_id=end_id, unsent_only=unsent_only, cond=" ts.c_end_time IS NOT NULL ")
         resp_data = []
 
         # Compose our response content

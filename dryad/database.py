@@ -11,7 +11,7 @@ import json
 import dryad.custom_ble as ble
 
 DEFAULT_DB_NAME = "dryad_cache.db"
-DEFAULT_GET_COND = "td.c_id IS NOT NULL AND ts.c_end_time IS NULL"
+DEFAULT_GET_COND = "td.c_id IS NOT NULL "
 
 module_logger = logging.getLogger("main.database")
 
@@ -445,7 +445,6 @@ class DryadDatabase():
         columns += "td.c_cal_vwc, td.c_soil_ec, td.c_cal_ec_porous, td.c_cal_ea, td.c_cal_ecb, "
         columns += "td.c_cal_dli, tnd.c_node_id, tnd.c_lat, tnd.c_lon, tn.c_site_name " 
         
-        cond += " AND ts.c_end_time IS NOT NULL "
         # Add condition if start_id is not none
         if start_id != None:
             cond += " AND td.c_id >= %i" % (start_id)

@@ -118,7 +118,7 @@ class ReadNodeTask(Thread):
 
         # Configurable parameters
         self.max_samples        = 1
-        self.sampling_duration  = 10.0
+        self.sampling_duration  = 5.0
 
         return
 
@@ -274,7 +274,7 @@ class CacheNode():
         self.msg_queue = queue
 
         self.node_max_samples = 5000
-        self.node_sampling_duration = 60.0 * 5.0
+        self.node_sampling_duration = 60.0 * 2.0
         return
 
     ## ----------------------- ##

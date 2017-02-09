@@ -76,14 +76,16 @@ class PeripheralDelegate(DefaultDelegate):
                 self.logger.info("Bluno: Deployed")
 
             if "RDEND:OK" in data:
-                if (self.readings_left > 0):
-                    self.pdevice.req_start_read(self.serial_ch)
-                
-                if (self.continue_read > 0):
-                    sleep(20.0)
-                    self.pdevice.req_start_read(self.serial_ch)
-                    self.continue_read -= 1
-                
+                try:
+                    if (self.readings_left > 0):
+                        self.pdevice.req_start_read(self.serial_ch)
+                    
+                    if (self.continue_read > 0):
+                        sleep(20.0)
+                        self.pdevice.req_start_read(self.serial_ch)
+                        self.continue_read -= 1
+                except Exception as e:
+                    self.logger.exception(e)
 
             if "pH" in data:
                 if self.is_reading == False:
@@ -239,11 +241,20 @@ class Bluno():
         # TODO This shouldn't be here in the future since we expect the
         #      sensor node to preserve its deployment state in-between
         #      bootups
-        self.req_deploy(serial_ch)
-        self.pdevice.waitForNotifications(1.0)
+        try:
+            self.req_deploy(serial_ch)
+            self.pdevice.waitForNotifications(1.0)
+        except Exception as e:
+            self.logger.exception(e)
 
         # Send a QREAD request through the Serial
-        res = self.req_start_read(serial_ch)
+        res = False
+        try:
+            res = self.req_start_read(serial_ch)
+        except Exception as e:
+            self.logger.exception(e)
+            res = False
+
         if (res == False):
             return False
         self.pdevice.waitForNotifications(1.0)
@@ -262,8 +273,11 @@ class Bluno():
         self.rct = ReadCompleteTask(self.hevent, 2.0)
         self.rct.start()
 
-        self.req_undeploy(serial_ch)
-        self.pdevice.waitForNotifications(1.0)
+        try:
+            self.req_undeploy(serial_ch)
+            self.pdevice.waitForNotifications(1.0)
+        except Exception as e:
+            self.logger.exception(e)
 
         return True
 
@@ -276,8 +290,15 @@ class Bluno():
 
         # Send a QSTOP request through the Serial
         serial_ch = self.get_serial()
-        res = self.req_stop_read(serial_ch)
+
+        res = False
+        try:
+            res = self.req_stop_read(serial_ch)
+        except Exception as e:
+            self.logger.exception(e)
+
         if (res == False):
+            self.pdevice.disconnect()
             return False
 
         # TODO Disconnect from the device ?
