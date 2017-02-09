@@ -5,6 +5,10 @@ echo "Configuring Bluetooth adapter..."
 sudo hciconfig hci0 piscan
 echo "Done."
 
+echo "Powering off HDMI..."
+/usr/bin/tvservice -o
+echo "Done."
+
 #cd ~/Programs/python-projects/dryad-node/
 
 # Run the main program

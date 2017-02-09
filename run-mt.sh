@@ -24,6 +24,9 @@ sudo /bin/hciconfig hci0 up
 sudo /bin/hciconfig hci0 piscan
 echo "Done."
 
+echo "Powering off HDMI..."
+/usr/bin/tvservice -o
+echo "Done."
 
 # Run the main program
 echo "Script started."
