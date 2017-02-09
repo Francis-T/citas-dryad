@@ -11,7 +11,7 @@ import json
 import dryad.custom_ble as ble
 
 DEFAULT_DB_NAME = "dryad_cache.db"
-DEFAULT_GET_COND = "td.c_id IS NOT NULL"
+DEFAULT_GET_COND = "td.c_id IS NOT NULL AND ts.c_end_time IS NULL"
 
 module_logger = logging.getLogger("main.database")
 
@@ -40,6 +40,7 @@ class DryadDatabase():
     # @return   A boolean indicating success or failure
     def perform(self, query, extras=None):
         result = False
+        print(query)
         try:
             if extras == None:
                 result = self.dbconn.execute(query)
@@ -136,7 +137,7 @@ class DryadDatabase():
         columns += "c_node_id       VARCHAR(50) PRIMARY KEY, "
         columns += "c_class         VARCHAR(50), "
         columns += "c_site_name     VARCHAR(50), "
-        columns += "c_date_updated  LONG"
+        columns += "c_date_updated  LONG "
 
         # Finally, build our query 
         query = "CREATE TABLE {} ({});".format(table_name, columns)
@@ -162,6 +163,7 @@ class DryadDatabase():
         columns += "c_last_scanned  LONG, "
         columns += "c_last_comms    LONG, "
         columns += "c_last_updated  LONG, "
+        columns += "c_activated     INTEGER, "
         columns += "FOREIGN KEY(c_node_id) "
         columns += "    REFERENCES t_node(c_node_id) "
 
@@ -516,7 +518,7 @@ class DryadDatabase():
             return False
 
         table_name = "t_node_device"
-        columns =   "c_node_id, c_lat, c_lon, c_batt, c_last_scanned, c_last_comms"
+        columns =   "c_node_id, c_lat, c_lon, c_batt, c_last_scanned, c_last_comms, c_activated"
         condition = 'c_type = "SELF"'
 
         # Build our SELECT query 
@@ -533,9 +535,8 @@ class DryadDatabase():
         return result[0]
     
     # @desc        Queries in the database the details of self - cache node
-    #
     # @return    Returns the list of the results containing details
-    def update_self_details(self, node_id=None, lat=None, lon=None, last_scanned=None, last_comms=None, site_name=None, state=None):
+    def update_self_details(self, node_id=None, lat=None, lon=None, last_scanned=None, last_comms=None, site_name=None, state=None, activated=None):
         if not self.dbconn:
             return False
         
@@ -544,6 +545,7 @@ class DryadDatabase():
             ( 'c_lon = {}',        lon ),
             ( 'c_last_scanned = {}',    last_scanned),
             ( 'c_last_comms = {}', last_comms),
+            ( 'c_activated = {}', activated),
         ]
 
         is_first = True
@@ -560,7 +562,8 @@ class DryadDatabase():
             
                 update += template.format(value)
 
-        condition = 'c_node_id = "{}"'.format(node_id)
+        #condition = 'c_node_id = "{}"'.format(node_id)
+        condition  = 'c_type = "SELF"'
 
         # Build our SELECT query 
         query = "UPDATE {} SET {} WHERE {}".format(table_name, update, condition)
@@ -589,7 +592,8 @@ class DryadDatabase():
             
                 update += template.format(value)
 
-        condition = 'c_node_id = "{}"'.format(node_id)
+        #condition = 'c_node_id = "{}"'.format(node_id)
+        condition  = 'c_class = "CACHE"'
 
         # Build our SELECT query 
         query = "UPDATE {} SET {} WHERE {}".format(table_name, update, condition)

@@ -439,6 +439,46 @@ class CacheNode():
 
         return
 
+    def is_activated(self):
+        ddb = DryadDatabase()
+        if ddb.connect(self.db_name) == False:
+            self.logger.error("Failed to connect to database")
+            return False
+
+        self_config = ddb.get_self_details()
+        if self_config == None:
+            ddb.disconnect()
+            return False
+
+        activated = self_config[6]
+        if activated == 1:
+            ddb.disconnect()
+            return True
+
+        ddb.disconnect()
+
+        return False
+
+    def set_activated(self, activated=None):
+        ddb = DryadDatabase()
+        if ddb.connect(self.db_name) == False:
+            self.logger.error("Failed to connect to database")
+            return False
+
+        active_state = 0
+        if activated:
+            active_state = 1
+
+        if ddb.update_self_details(activated=active_state) == False:
+            self.logger.error("Failed to update database")
+            ddb.disconnect()
+            return False
+
+        ddb.disconnect()
+
+        return False
+
+
     ## -------------------------------------- ##
     ## SEC03: Database Manipulation Functions ##
     ## -------------------------------------- ##

@@ -209,7 +209,7 @@ class Bluno():
         # Check if connected
         if (is_connected == False):
             self.is_connected = False
-            self.logger.error("Failed to connect to device")
+            self.logger.error("[{}] Failed to connect to device".format(self.ble_name))
         else:
             self.is_connected = True
             self.logger.info("Connected.")
