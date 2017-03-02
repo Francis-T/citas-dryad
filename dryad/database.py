@@ -40,7 +40,6 @@ class DryadDatabase():
     # @return   A boolean indicating success or failure
     def perform(self, query, extras=None):
         result = False
-        print(query)
         try:
             if extras == None:
                 result = self.dbconn.execute(query)
@@ -713,6 +712,10 @@ class DryadDatabase():
         table_name = "t_node_device"
         update = ""
         for template, value in update_map:
+            if node_id == None:
+                if template == 'c_addr = "{}"':
+                    continue
+
             if not value == None:
                 if not is_first:
                     update += ", "
@@ -721,12 +724,17 @@ class DryadDatabase():
                 
                 update += template.format(value)
         
-        condition = 'c_node_id = "{}"'.format(node_id)
+        condition = 'c_node_id IS NOT NULL'
+        if node_id != None:
+            condition = 'c_node_id = "{}"'.format(node_id)
+        elif node_addr != None:
+            condition = 'c_addr = "{}"'.format(node_addr)
 
         # Build our UPDATE query 
         query = "UPDATE {} SET {} WHERE {}".format(table_name, update, condition)
 
         # And execute it using our database connection 
+        self.logger.debug(query)
         return self.perform(query)
 
     def update_node(self, node_id=None, node_class=None, site_name=None):
@@ -839,19 +847,26 @@ class DryadDatabase():
         # And execute it using our database connection 
         return self.perform(query)
 
-    def remove_node(self, node_id=None, node_class="SENSOR"):
+    def remove_node(self, node_id=None):
         if not self.dbconn:
             return False
 
-        table_name = 't_node_device'
-        if node_class == "SELF":
-            table_name = 't_node'
-        
         condition = 'c_node_id = "{}"'.format(node_id)
 
-        # Build our DELETE query 
+        # Delete from t_node_device 
+        table_name = 't_node_device'
+        query = "DELETE FROM {} WHERE {}".format(table_name, condition)
+        result = self.perform(query)
+
+        self.logger.info(query)
+        if result == False:
+            return result
+
+        # Delete from t_node 
+        table_name = 't_node'
         query = "DELETE FROM {} WHERE {}".format(table_name, condition)
 
+        self.logger.info(query)
         # And execute it using our database connection 
         return self.perform(query)
 

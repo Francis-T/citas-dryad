@@ -7,7 +7,7 @@ import logging
 import json
 import pprint as pp
 
-from time import time
+from time import time, ctime
 from queue import Queue
 from threading import Event
 
@@ -166,12 +166,22 @@ class RequestHandler():
                 sn = "'name':'{}', 'state':'{}',"
                 sn += "'site_name':'{}','lat':'{}', 'lon':'{}',"
                 sn += "'pf_addr':'{}', 'bl_addr':'{}', 'pf_batt':'{}',"
-                sn += "'bl_batt':'{}'"
+                sn += "'bl_batt':'{}', 'pf_comms':'{}', 'bl_comms':'{}'"
 
                 
                 # Add state in node devices table
                 # By Pair access of sensor nodes details. Brute force.Should be in sql query
-                sn = sn.format(nodes[2*idx][1], nodes[2*idx][10], nodes[2*idx][6], nodes[2*idx][3], nodes[2*idx][4], nodes[2*idx+1][0], nodes[2*idx][0], nodes[2*idx+1][5], nodes[2*idx][5])
+                sn = sn.format(nodes[2*idx][1], 
+                               nodes[2*idx][10], 
+                               nodes[2*idx][6], 
+                               nodes[2*idx][3], 
+                               nodes[2*idx][4], 
+                               nodes[2*idx+1][0], 
+                               nodes[2*idx][0], 
+                               nodes[2*idx+1][5], 
+                               nodes[2*idx][5],
+                               ctime(int(nodes[2*idx+1][9])), 
+                               ctime(int(nodes[2*idx][9])), )
  
                 # If last entry, no comma
                 if idx is (int(len(nodes)/2))-1:
@@ -296,7 +306,8 @@ class RequestHandler():
             "rpi_name"    : None, 
             "sn_name"   : None, 
         }
-
+        
+        content = content.strip(";")
         remove_args = content.split(',')
         
         if len(remove_args) > 0:
@@ -316,17 +327,17 @@ class RequestHandler():
         if db.connect(self.dbname) == False:
             return False
 
-        result = db.remove_node(node_id=params["sn_name"], node_class="SENSOR")
+        result = db.remove_node(node_id=params["sn_name"])
         if result == False:
             self.logger.error("Failed to remove node")
             link.send_response("RDLTE:FAIL;\r\n")
             return False
 
-        result = db.remove_node(node_id=params["sn_name"], node_class="SELF" ) 
-        if result == False:
-            self.logger.error("Failed to remove node")
-            link.send_response("RDLTE:FAIL;\r\n")
-            return False
+        #result = db.remove_node(node_id=params["sn_name"], node_class="SELF" ) 
+        #if result == False:
+        #    self.logger.error("Failed to remove node")
+        #    link.send_response("RDLTE:FAIL;\r\n")
+        #    return False
 
         return link.send_response("RDLTE:OK;\r\n")
 

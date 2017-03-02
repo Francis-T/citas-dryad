@@ -3,6 +3,8 @@ from threading import Event, Thread
 from collections import defaultdict 
 from time import sleep, time
 
+from dryad.database import DryadDatabase
+
 import utils.transform as transform
 import datetime
 import traceback
@@ -27,7 +29,7 @@ DEVINFO_CHARS = {
 }
 
 SERIAL_HDL = 37
-MAX_CONN_RETRIES = 10
+MAX_CONN_RETRIES = 40 # old number was 10
 
 DEBUG_RAW_DATA = False
 
@@ -58,7 +60,7 @@ class PeripheralDelegate(DefaultDelegate):
 
         self.readings = np.array([])
         self.readings_left = read_samples
-        self.read_until = read_until
+        self.read_until = time() + read_until
 
         self.is_reading = True
         self.continue_read = 14
@@ -70,10 +72,10 @@ class PeripheralDelegate(DefaultDelegate):
         data = str(data)
         if cHandle is SERIAL_HDL:
             if "RUNDP:OK" in data:
-                self.logger.info("Bluno: Undeployed")
+                self.logger.info("[{}] Bluno: Undeployed".format(self.pdevice.ble_name))
 
             if "RDEPL:OK" in data:
-                self.logger.info("Bluno: Deployed")
+                self.logger.info("[{}] Bluno: Deployed".format(self.pdevice.ble_name))
 
             if "RDEND:OK" in data:
                 try:
@@ -99,7 +101,7 @@ class PeripheralDelegate(DefaultDelegate):
                     if DEBUG_RAW_DATA == False:
                             ph_data = tr.conv_ph(float(ph_data)) 
                 except:
-                    self.logger.error("Cannot convert ph data ({}) to float".format(ph_data))
+                    self.logger.error("[{}] Cannot convert ph data ({}) to float".format(self.pdevice.ble_name, ph_data))
 
                     # Once the desired limit of readings are reached, trigger the
                     #   handle event to signal that the contents can now be taken
@@ -136,13 +138,13 @@ class PeripheralDelegate(DefaultDelegate):
         # If the current time exceeds our read until value,
         #   then return False immediately to stop reading
         if (self.read_until > 0) and (time() > self.read_until):
-            self.logger.debug("Read time limit exceeded")
+            self.logger.debug("[{}] Read time limit exceeded".format(self.pdevice.ble_name))
             return False
             
         # Otherwise, check if the limit of readings has been
         #   reached and return False to stop reading
         if self.readings_left <= 0:
-            self.logger.debug("Read sample limit exceeded")
+            self.logger.debug("[{}] Read time limit exceeded".format(self.pdevice.ble_name))
             return False
 
         # Allow reading to continue otherwise
@@ -154,7 +156,8 @@ class PeripheralDelegate(DefaultDelegate):
         return self.readings
 
 class Bluno():
-    def __init__(self, address, name, event):
+    def __init__(self, address, name, event, db_name="dryad_test_cache.db"):
+        self.db_name = db_name
         self.ble_name = name
         self.ble_addr = address
         self.pdevice = None
@@ -188,13 +191,14 @@ class Bluno():
             try:
                 self.pdevice = Peripheral(self.ble_addr, "public")
             except Exception as err:
+                self.logger.error("[{}] Connection failed: {}".format(self.ble_name, err.message))
                 is_connected = False
 
             elapsed_time = time() - conn_attempt_time
 
             # Leave the loop immediately if we're already connected
             if ( is_connected ):
-                self.logger.debug("[{}] Overall connect time: {} secs".format(self.ble_name, time() - start_time))
+                self.logger.debug("[{}] Overall connect time: {} secs, Total retries: {}".format(self.ble_name, time() - start_time, retries))
                 break
 
             # Put out a warning and cut down retries if our connect attempt exceeds thresholds
@@ -205,7 +209,6 @@ class Bluno():
 
             retries += 1
 
-            sleep(6.0 + 1.2 * retries)
             self.logger.info("[{}] Attempting to connect ({})...".format(self.ble_name, retries))
 
         # Check if connected
@@ -214,7 +217,8 @@ class Bluno():
             self.logger.error("[{}] Failed to connect to device".format(self.ble_name))
         else:
             self.is_connected = True
-            self.logger.info("Connected.")
+            self.logger.info("[{}] Connected.".format(self.ble_name))
+            self.log_connected()
 
         return self.is_connected
 
@@ -225,7 +229,7 @@ class Bluno():
         if (self.is_connected == False):
             res = self.connect()
             if (res == False):
-                self.logger.error("Cannot read from unconnected device")
+                self.logger.error("[{}] Cannot read from unconnected device".format(self.ble_name))
                 return False
         
         # Setup the BLE peripheral delegate
@@ -244,6 +248,7 @@ class Bluno():
         try:
             self.req_deploy(serial_ch)
             self.pdevice.waitForNotifications(1.0)
+
         except Exception as e:
             self.logger.exception(e)
 
@@ -265,7 +270,7 @@ class Bluno():
             self.pdevice.waitForNotifications(2.0)
             ns += 1
 
-        self.logger.info("Finished QREAD")
+        self.logger.info("[{}] Finished QREAD".format(self.ble_name))
 
         # TODO Workaround for triggering the data collection wait event.
         #      Eventually, the entire contents of this function would
@@ -285,21 +290,21 @@ class Bluno():
     # @return   A boolean indicating success or failure
     def stop(self):
         if (self.is_connected == False):
-            self.logger.info("Already stopped")
+            self.logger.info("[{}] Already stopped".format(self.pdevice.ble_name))
             return True
-
-        # Send a QSTOP request through the Serial
-        serial_ch = self.get_serial()
-
-        res = False
-        try:
-            res = self.req_stop_read(serial_ch)
-        except Exception as e:
-            self.logger.exception(e)
-
-        if (res == False):
-            self.pdevice.disconnect()
-            return False
+            
+            # Send a QSTOP request through the Serial 
+            serial_ch = self.get_serial() 
+            res = False 
+            
+            try: 
+                res = self.req_stop_read(serial_ch) 
+            except Exception as e:
+                self.logger.exception(e) 
+            
+            if (res == False): 
+                self.pdevice.disconnect()
+                return False
 
         # TODO Disconnect from the device ?
         self.pdevice.disconnect()
@@ -309,6 +314,20 @@ class Bluno():
     ## -------------- ##
     ## Misc Functions ##
     ## -------------- ##
+    def log_connected(self):
+        ddb = DryadDatabase()
+        if ddb.connect(self.db_name) == False:
+            self.logger.error("Failed to connect to database")
+            return False
+
+        result = ddb.update_node_device(node_addr=self.ble_addr, comms=int(time()))
+        if result == False:
+            self.logger.error("Failed to update node device")
+            return False
+
+        ddb.disconnect()
+        return True
+
 
     # @desc     Returns the serial characteristic
     # @return   A Characteristic object representing the Serial characteristic
@@ -370,6 +389,7 @@ class Bluno():
 
         try:
             serial.write(str.encode(contents))
+            self.logger.debug("Sent data: {}".format(contents))
         except Exception as err:
             self.logger.exception(err)
             return False

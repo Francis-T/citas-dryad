@@ -4,6 +4,8 @@ from collections import defaultdict
 from time import sleep, time
 from pprint import pprint
 
+from dryad.database import DryadDatabase
+
 import datetime
 import traceback
 import numpy as np
@@ -14,18 +16,18 @@ import logging
 ## Constants ##
 # Services
 SERVICES = {
-    "LIVE"            : "39e1fa0084a811e2afba0002a5d5c51b",
+    "LIVE"           : "39e1fa0084a811e2afba0002a5d5c51b",
     "BATTERY"        : 0x180f,
     "DEVICE_INFO"    : 0x180a
 }
 
 # Sensors Characteristics (Old firmware)
 SENSORS = {
-    "SUNLIGHT"        : "39e1fa0184a811e2afba0002a5d5c51b",
+    "SUNLIGHT"       : "39e1fa0184a811e2afba0002a5d5c51b",
     "SOIL_EC"        : "39e1fa0284a811e2afba0002a5d5c51b",
-    "SOIL_TEMP"        : "39e1fa0384a811e2afba0002a5d5c51b",
-    "AIR_TEMP"        : "39e1fa0484a811e2afba0002a5d5c51b",
-    "SOIL_MOISTURE"    : "39e1fa0584a811e2afba0002a5d5c51b",
+    "SOIL_TEMP"      : "39e1fa0384a811e2afba0002a5d5c51b",
+    "AIR_TEMP"       : "39e1fa0484a811e2afba0002a5d5c51b",
+    "VWC"            : "39e1fa0584a811e2afba0002a5d5c51b",
 }
 
 # Sensors Characteristics (New firmware)
@@ -52,7 +54,8 @@ CONTROLS = {
     "BATTERY_LEVEL"        : 0x2a19
 }
 
-MAX_CONN_RETRIES = 20
+#MAX_CONN_RETRIES = 20
+MAX_CONN_RETRIES = 60 # old number was 20
 MAX_SENSOR_READINGS = 250
 
 FLAG_NOTIF_ENABLE   = "\x01\x00"
@@ -61,6 +64,7 @@ FLAG_NOTIF_DISABLE  = "\x00\x00"
 DEBUG_RAW_DATA = False
 
 READ_FREQ = 20.0
+CONN_FREQ = 0.3
 
 
 class ReadThread(Thread):
@@ -77,14 +81,14 @@ class ReadThread(Thread):
 
     def run(self):
         if self.pdevice == None:
-            self.logger.error("No device")
+            self.logger.error("[{}] No device".format(self.pdevice.ble_name))
             self.hevent.set()
             return False
         
         if self.pdevice.is_connected == False:
             res = self.pdevice.connect()
             if (res == False):
-                self.logger.error("Cannot read from unconnected device")
+                self.logger.error("[{}] Cannot read from unconnected device".format(self.pdevice.ble_name))
                 self.hevent.set()
                 return False
 
@@ -92,17 +96,18 @@ class ReadThread(Thread):
         self.pdevice.setup_conn()
 
         try:
+            self.read_until = time() + self.read_until
             self.perform_read()
 
         except Exception as e:
-            self.logger.error("Exception occurred: " + str(e))
+            self.logger.error("[{}] Exception occurred: {}".format(self.pdevice.ble_name, str(e)))
 
-        self.logger.info("Finished reading")
+        self.logger.info("[{}] Finished reading".format(self.pdevice.ble_name))
 
         self.hevent.set()
-
+        
+        self.logger.info("[{}] Stopping device".format(self.pdevice.ble_name)) 
         self.pdevice.stop()
-
         return True
 
     def perform_read(self):
@@ -123,7 +128,10 @@ class ReadThread(Thread):
                 
                 out_str = "[{}] ".format(self.pdevice.ble_name)
                 for key, val in reading.items():
-                    out_str += "{} = {:.2f}, ".format(key, val)
+                    if val == None:
+                        out_str += "{} = 0.00, ".format(key)
+                    else:
+                        out_str += "{} = {:.2f}, ".format(key, val)
 
                 self.logger.info(out_str)
 
@@ -144,13 +152,13 @@ class ReadThread(Thread):
         # If the current time exceeds our read until value,
         #   then return False immediately to stop reading
         if (self.read_until > 0) and (time() > self.read_until):
-            self.logger.debug("Read time limit exceeded")
+            self.logger.debug("[{}] Read time limit exceeded".format(self.pdevice.ble_name))
             return False
             
         # Otherwise, check if the limit of readings has been
         #   reached and return False to stop reading
         if self.readings_left <= 0:
-            self.logger.debug("Read sample limit exceeded")
+            self.logger.debug("[{}] Read sample limit exceeded".format(self.pdevice.ble_name))
             return False
 
         # Allow reading to continue otherwise
@@ -161,7 +169,8 @@ class ReadThread(Thread):
 
 # Parrot class    
 class Parrot():    
-    def __init__(self, address, name, event):
+    def __init__(self, address, name, event, db_name="dryad_test_cache.db"):
+        self.db_name = db_name
         self.ble_name = name
         self.ble_addr = address
         self.pdevice = None
@@ -189,7 +198,7 @@ class Parrot():
     # @desc     Manually triggers connection to this sensor
     # @return   A boolean indicating success or failure
     def connect(self):
-        self.logger.info("Attempting to connect to {} [{}]".format(self.ble_name, self.ble_addr))
+        self.logger.info("[{}] Attempting to connect to {}".format(self.ble_name, self.ble_addr))
         retries = 0
 
         # Attempt to connect to the peripheral device a few times
@@ -202,13 +211,14 @@ class Parrot():
             try:
                 self.pdevice = Peripheral(self.ble_addr, "public")
             except Exception as err:
+                self.logger.error("[{}] Connection failed: {} ".format(self.ble_name, err.message))
                 is_connected = False
 
             elapsed_time = time() - conn_attempt_time
 
             # Leave the loop immediately if we're already connected
             if ( is_connected ):
-                self.logger.debug("[{}] Overall connect time: {} secs".format(self.ble_name, time() - start_time))
+                self.logger.debug("[{}] Overall connect time: {} secs, Total retries: {}".format(self.ble_name, time() - start_time, retries))
                 break
 
             # Put out a warning and cut down retries if our connect attempt exceeds thresholds
@@ -219,7 +229,8 @@ class Parrot():
 
             retries += 1
 
-            sleep(6.0 + 1.0 * retries)
+            # sleep(6.0 + 1.0 * retries)
+            sleep(CONN_FREQ)
             self.logger.debug("[{}] Attempting to connect ({})...".format(self.ble_name, retries))
 
         # Check if connected
@@ -229,6 +240,7 @@ class Parrot():
         else:
             self.is_connected = True
             self.logger.info("[{}] Connected.".format(self.ble_name))
+            self.log_connected()
 
         return self.is_connected
 
@@ -247,9 +259,9 @@ class Parrot():
     # @desc     Stops an ongoing sensor read operation
     # @return   A boolean indicating success or failure
     def stop(self):
-        self.logger.debug("Stop called for {}".format(self.ble_name))
+        self.logger.debug("[{}] Stop called".format(self.ble_name))
         if (self.is_connected == False):
-            self.logger.info("Already stopped")
+            self.logger.info("[{}] Already stopped".format(self.ble_name))
             return True
 
         # TODO Disconnect from the device ?
@@ -260,6 +272,38 @@ class Parrot():
     ## -------------- ##
     ## Misc Functions ##
     ## -------------- ##
+    def log_connected(self):
+        ddb = DryadDatabase()
+        if ddb.connect(self.db_name) == False:
+            self.logger.error("Failed to connect to database")
+            return False
+
+        result = ddb.update_node_device(node_addr=self.ble_addr, comms=int(time()))
+        if result == False:
+            self.logger.error("Failed to update node device")
+            return False
+
+        ddb.disconnect()
+        return True
+
+    # @desc     Adds new sensor data to the local data cache
+    # @return   A boolean indicating success or failure
+    def add_data(self, content, source, timestamp):
+        ddb = DryadDatabase()
+        if ddb.connect(self.db_name) == False:
+            self.logger.error("Failed to connect to database")
+            return False
+
+        session_id = ddb.get_current_session()
+        
+        if ddb.add_data(session_id, source, content, node_type=self.node_ref['type'], dest="ATENEO") == False:
+            self.logger.error("Failed to add new data")
+            return False
+
+        ddb.disconnect()
+        return True
+
+
     # @desc     Set the number of samples per read session
     # @return   None
     def set_max_samples(self, count):
@@ -298,6 +342,7 @@ class Parrot():
         
         reading = dict.fromkeys(sensors)
 
+        # Reading battery level from battery service
         battery_level_ch = self.battery_service.getCharacteristics(UUID(CONTROLS["BATTERY_LEVEL"]))[0]
         battery_level = 0
         
@@ -308,7 +353,7 @@ class Parrot():
                 reading["BATTERY"] = battery_level
         except Exception as err:
             #self.logger.exception(traceback.print_tb(err.__traceback__))
-            self.logger.error("Exception occurred: {}".format(str(err)))
+            self.logger.error("[{}] Exception occurred: {}".format(self.ble_name, str(err)))
             return None
 
         self.switch_led(FLAG_NOTIF_ENABLE)
@@ -318,8 +363,12 @@ class Parrot():
             if key not in sensors:
                 # Skip all sensors we aren't reading this time
                 continue
-                
-            char = self.live_service.getCharacteristics(UUID(val))[0]    
+            svchar_live = self.live_service.getCharacteristics(UUID(val)) 
+            if len(svchar_live) <= 0:
+                #self.logger.debug("No characteristic: {}, {}".format(key, val))
+                continue
+
+            char = svchar_live[0]
             if char.supportsRead(): 
                 try:
                     if DEBUG_RAW_DATA and (key in ["SUNLIGHT", "SOIL_EC", "AIR_TEMP", "SOIL_TEMP", "VWC"]):
@@ -329,14 +378,29 @@ class Parrot():
                             reading[key] = tr.conv_light(tr.unpack_U16(char.read()))
                         elif key == "SOIL_EC":
                             reading[key] = tr.conv_ec(tr.unpack_U16(char.read()))
-                        elif key in ["AIR_TEMP", "SOIL_TEMP"]:
+                            # Support cases where firmware is old
+                            if reading["CAL_DLI"] == None:
+                                reading["CAL_DLI"] = reading[key] 
+                                reading["CAL_EA"] = reading[key] 
+                                reading["CAL_ECB"] = reading[key] 
+                                reading["CAL_EC_POROUS"] = reading[key] 
+                        elif key in "SOIL_TEMP":
                             reading[key] = tr.conv_temp(tr.unpack_U16(char.read()))
+                        elif key == "AIR_TEMP": 
+                            reading[key] = tr.conv_temp(tr.unpack_U16(char.read()))
+                            # Support cases where firmware is old
+                            if reading["CAL_AIR_TEMP"] == None:
+                                reading["CAL_AIR_TEMP"] = reading[key] 
                         elif key == "VWC":
                             reading[key] = tr.conv_moisture(tr.unpack_U16(char.read()))
+                            # Support cases where firmware is old
+                            if reading["CAL_VWC"] == None:
+                                reading["CAL_VWC"] = reading[key] 
                         else:
                             reading[key] = tr.decode_float32(char.read())
+                                        
                 except Exception as e:
-                    self.logger.error("Failed to read and decode sensor data: " + str(char.read()))
+                    self.logger.error("[{}] Failed to read and decode sensor data: {}" + str(self.ble_name, char.read()))
 
         reading['ts'] = int(time())
         self.switch_led(FLAG_NOTIF_DISABLE)
@@ -383,7 +447,7 @@ class Parrot():
         try:
             self.pdevice.disconnect()
         except Exception as e:
-            self.logger.error("Stop device failed: " + str(e))
+            self.logger.error("[{}] Stop device failed: ".format(self.ble_name, str(e)))
 
         return
 
