@@ -1,6 +1,6 @@
 import unittest
 import time
-from dryad.database_sqal import DryadDatabase
+from database_sqal import DryadDatabase
 
 
 class TestDatabase(unittest.TestCase):

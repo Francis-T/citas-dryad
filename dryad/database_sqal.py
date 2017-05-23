@@ -1,3 +1,5 @@
+import logging
+
 from models import Base, NodeData, NodeEvent, SystemInfo
 from models import Node, SystemParam, NodeDevice, Session
 
@@ -6,14 +8,13 @@ from sqlalchemy.orm import sessionmaker
 
 import time
 
+DEFAULT_DB_NAME = "sqlite:///dryad_cache.db"
+module_logger = logging.getLogger("main.database")
+
 
 class DryadDatabase:
-    def __init__(self, test_session=False):
-        if test_session:
-            self.engine = create_engine('sqlite:///test.db')
-
-        else:
-            self.engine = create_engine('sqlite:///dryad.db')
+    def __init__(self, db_name=DEFAULT_DB_NAME):
+        self.engine = create_engine(db_name)
 
         event.listen(self.engine, 'connect', self.on_connect)
         DBSession = sessionmaker(bind=self.engine)
@@ -22,13 +23,21 @@ class DryadDatabase:
         # Current db session
         self.db_session = DBSession()
 
-    # Executes each test case
-    def tearDown(self):
-        Base.metadata.drop_all(self.engine)
+    def close_session(self):
+        try:
+            self.db_session.close()
+        except Exception as e:
+            print(e)
+            return False
+        return True
 
     # Required in order to add foreign keys constraints
     def on_connect(self, conn, record):
         conn.execute('pragma foreign_keys=ON')
+
+    # Executes each test case
+    def tearDown(self):
+        Base.metadata.drop_all(self.engine)
 
     ##********************************##
     ##          Utilities             ##
@@ -89,12 +98,12 @@ class DryadDatabase:
     def get_system_param(self, name):
         result = self.db_session.query(
             SystemParam).filter_by(name=name).first()
-        return self.get(name, result)
+        return self.get(field=name, result=result)
 
     def get_system_info(self, name):
         result = self.db_session.query(
             SystemInfo).filter_by(name=name).first()
-        return self.get(name, result)
+        return self.get(field=name, result=result)
 
     ##********************************##
     ##              Node              ##
@@ -104,8 +113,20 @@ class DryadDatabase:
                     lat=lat, lon=lon)
         return self.insert_or_update(node)
 
-    def get_node(self, name):
-        result = self.db_session.query(Node).filter_by(name=name).first()
+    def get_nodes(self, name=None, node_class=None):
+        if name is not None and node_class is not None:
+            result = self.db_session.query(
+                Node).filter(and_(name=name, node_class=node_class)).first()
+        elif name is not None:
+            result = self.db_session.query(
+                Node).filter_by(name=name).first()
+        elif node_class is not None:
+            result = self.db_session.query(
+                Node).filter_by(node_class=node_class).all()
+        else:
+            result = self.db_session.query(
+                Node).all()
+
         return self.get(name, result)
 
     def delete_node(self, name):
@@ -136,13 +157,18 @@ class DryadDatabase:
         session = Session(start_time=str(int(time.time())), end_time=-1)
         return self.add(session)
 
-    def get_session(self):
-        result = self.db_session.query(Session).order_by(Session.id.desc())[-1]
+    def get_current_session(self):
+        try:
+            result = self.db_session.query(Session).order_by(
+                Session.id.desc()).filter(Session.end_time == -1)[-1]
+        except Exception as e:
+            print("No available open session")
+            return False
         return result
 
     def terminate_session(self):
-        result = self.get_session()
-        if result is None:
+        result = self.get_current_session()
+        if result is False:
             return False
         result.end_time = str(int(time.time()))
         self.db_session.commit()
@@ -168,7 +194,7 @@ class DryadDatabase:
         return result
 
     def add_data(self, source_id, content, timestamp):
-        data = NodeData(session_id=self.get_session().id, source_id=source_id,
+        data = NodeData(session_id=self.get_current_session().id, source_id=source_id,
                         content=content, timestamp=timestamp)
 
         return self.add(data)
