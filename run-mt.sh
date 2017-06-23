@@ -16,6 +16,8 @@ echo $'\nDone.'
 
 cd $CACHE_NODE_HOME
 
+sudo hwclock -s
+
 # Set the HCI Config to PSCAN so that other devices can connect to it
 echo "Configuring Bluetooth adapter..."
 sudo /bin/hciconfig hci1 down
