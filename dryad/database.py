@@ -1,873 +1,339 @@
-"""
-    Name: database.py
-    Author: Jerelyn C / Francis
-    Description:
-        Source code for the Database controller module
-"""
-import sqlite3
-import time
 import logging
-import json
-import dryad.custom_ble as ble
+import time
 
-DEFAULT_DB_NAME = "dryad_cache.db"
-DEFAULT_GET_COND = "td.c_id IS NOT NULL "
+from collections import Iterable
+from sqlalchemy import create_engine, event, and_
+from sqlalchemy.orm import sessionmaker
 
+from dryad.models import Base, NodeData, NodeEvent, SystemInfo
+from dryad.models import Node, SystemParam, NodeDevice, Session
+from dryad.models import SessionData
+
+
+DEFAULT_DB_NAME = "sqlite:///dryad_cache.db"
 module_logger = logging.getLogger("main.database")
 
-class DryadDatabase():
-    def __init__(self):
-        self.db_name = ""
-        self.dbconn = None
-        self.logger = logging.getLogger("main.database.DryadDatabase")
 
-    """
-        Connect to the database
-    """
-    def connect(self, db_name=DEFAULT_DB_NAME):
-        self.dbconn = sqlite3.connect(db_name)
-        return self.dbconn
+class DryadDatabase:
+    def __init__(self, db_name=DEFAULT_DB_NAME):
+        self.engine = create_engine(db_name)
 
-    # @desc     Disconnects from the database
-    # @return   None
-    def disconnect(self):
-        if self.dbconn == None:
-            return
-        self.dbconn.close()
-        return
+        event.listen(self.engine, 'connect', self.on_connect)
+        DBSession = sessionmaker(bind=self.engine)
+        Base.metadata.create_all(self.engine)
 
-    # @desc     Executes the query using the provided database connection
-    # @return   A boolean indicating success or failure
-    def perform(self, query, extras=None):
-        result = False
+        # Current db session
+        self.db_session = DBSession()
+
+    def close_session(self):
         try:
-            if extras == None:
-                result = self.dbconn.execute(query)
-            else:
-                result = self.dbconn.execute(query, extras)
-
-            self.dbconn.commit()
-        except sqlite3.OperationalError:           
-            self.logger.exception("Query Failed (Operational Error): {}".format(query))
+            self.db_session.close()
+        except Exception as e:
+            print(e)
             return False
+        return True
 
-        except sqlite3.IntegrityError:
-            self.logger.exception("Query Failed (Integrity Error): {}".format(query))
+    # Required in order to add foreign keys constraints
+    def on_connect(self, conn, record):
+        conn.execute('pragma foreign_keys=ON')
+
+    # Executes each test case
+    def tearDown(self):
+        Base.metadata.drop_all(self.engine)
+
+    ##********************************##
+    ##          Utilities             ##
+    ##******************************* ##
+    # @desc     Adds a record
+    # @return   True if successful, otherwise False
+    def add(self, row):
+        try:
+            self.db_session.add(row)
+            self.db_session.commit()
+        except Exception as e:
+            print(e)
             return False
+        return True
 
-        if not result == True and not result == False:
-            return result.fetchall()
+    # @desc     Inserts if record non-existing, update if otherwise
+    # @return   True if successful, otherwise False
+    def insert_or_update(self, obj):
+        try:
+            self.db_session.merge(obj)
+            self.db_session.commit()
+        except Exception as e:
+            print(e)
+            return False
+        return True
+
+    # @desc     Gets a record
+    # @return   True if successful, otherwise False
+    def get(self, field, result):
+        if result is not None:
+
+            # If the result is already a list, we can return it immediately
+            if type(result) is list:
+                return result
+
+            # If it is an iterable, transform it into a Python list
+            if isinstance(result, Iterable):
+                return result.all()
+
+            # Otherwise, encapsulate it in a Python list
+            return [ result ]
+
+        print("Get: Non-existing {}.".format(field))
+        return False
+
+    # @desc     Deletes a record
+    # @return   True if successful, otherwise False
+    def delete(self, obj):
+        try:
+            self.db_session.delete(obj)
+            self.db_session.commit()
+        except Exception as e:
+            print(e)
+            return False
 
         return True
 
     ##********************************##
-    ##  SEC01: Table Setup Functions  ##
+    ##        System Parameters       ##
     ##******************************* ##
-    # @desc     Setup the capture session table to track individual
-    #           sensor read sessions
-    # @return   A boolean indicating success or failure
-    def setup_sessions_table(self):
-        # Identify our target table 
-        table_name = "t_session"
+    def insert_or_update_system_param(self, name=None, value=""):
+        sys_param = SystemParam(name=name, value=value)
+        return self.insert_or_update(sys_param)
 
-        # Build up our columns 
-        columns = ""
-        columns += "c_id            INTEGER PRIMARY KEY, "
-        columns += "c_start_time    LONG, "
-        columns += "c_end_time      LONG "
+    def insert_or_update_system_info(self, name=None, value=""):
+        sys_info = SystemInfo(name=name, value=value)
+        return self.insert_or_update(sys_info)
 
-        # Finally, build our query 
-        query = "CREATE TABLE {} ({});".format(table_name, columns)
+    def get_system_param(self, name):
+        result = self.db_session.query(
+            SystemParam).filter_by(name=name).first()
+        return self.get(field=name, result=result)
 
-        # Debug Note: This is where you can opt to print out your query 
+    def get_system_info(self, name):
+        result = self.db_session.query(
+            SystemInfo).filter_by(name=name).first()
+        return self.get(field=name, result=result)
 
-        # And execute it using our database connection 
-        return self.perform(query)
+    def get_all_system_params(self):
+        result = self.db_session.query(SystemParam).all()
+        return self.get("sys_params", result)
 
+    def get_all_system_info(self):
+        result = self.db_session.query(SystemInfo).all()
+        return self.get("sys_info", result)
 
-    # @desc     Setup the sensor data cache table
-    # @return   A boolean indicating success or failure
-    def setup_data_cache_table(self):
-        # Identify our target table 
-        table_name = "t_data_cache"
+    ##********************************##
+    ##              Node              ##
+    ##******************************* ##
+    def insert_or_update_node(self, name, node_class, site_name=None, lat=None, lon=None):
+        node_lat  = lat
+        node_lon  = lon
+        node_site = site_name
 
-        # Build up our columns 
-        columns = ""
-        columns += "c_id            INTEGER PRIMARY KEY, "
-        columns += "c_session_id    INTEGER, "
-        columns += "c_source        VARCHAR, "
-        columns += "c_dest          VARCHAR, "
-        ## Adding columns for an column-based content 
-        columns += "c_sunlight      FLOAT(8), "
-        columns += "c_soil_temp     FLOAT(8), "
-        columns += "c_air_temp      FLOAT(8), "
-        columns += "c_cal_air_temp  FLOAT(8), "
-        columns += "c_vwc           FLOAT(8), "
-        columns += "c_cal_vwc       FLOAT(8), "
-        columns += "c_soil_ec       FLOAT(8), "
-        columns += "c_cal_ec_porous FLOAT(8), "
-        columns += "c_cal_ea        FLOAT(8), "
-        columns += "c_cal_ecb       FLOAT(8), "
-        columns += "c_cal_dli       FLOAT(8), "
-        columns += "c_ph            FLOAT(8), "
-        columns += "c_upload_time   LONG, "
-        columns += "c_is_sent       INTEGER DEFAULT 0, "
-        columns += "FOREIGN KEY(c_session_id) "
-        columns += "    REFERENCES t_session(c_id), "
-        columns += "FOREIGN KEY(c_source) "
-        columns += "    REFERENCES t_node(c_node_id), "
-        columns += "FOREIGN KEY(c_dest) "
-        columns += "    REFERENCES t_node(c_node_id) "
+        matched_nodes = self.get_nodes(name)
+        if matched_nodes != False:
+            if len(matched_nodes) <= 0:
+                node_lat = 0.0
+                node_lon = 0.0
+                site_name = "????"
 
-        # Finally, build our query 
-        query = "CREATE TABLE {} ({});".format(table_name, columns)
+            else:
+                # Attempt to reload the old parameters if ever there are none supplied
+                if lat == None:
+                    node_lat  = matched_nodes[0].lat
 
-        # And execute it using our database connection 
-        return self.perform(query)
+                if lon == None:
+                    node_lon  = matched_nodes[0].lon
 
-    # @desc     Setup the node table
-    # @return   A boolean indicating success or failure
-    def setup_nodes_table(self):
-        # Identify our target table
-        table_name = "t_node"
+                if site_name == None:
+                    node_site = matched_nodes[0].site_name
+            
+        node = Node(name=name, node_class=node_class, 
+                    site_name=node_site, lat=node_lat, lon=node_lon)
+        return self.insert_or_update(node)
 
-        # Build up our columns
-        columns =  ""
-        columns += "c_node_id       VARCHAR(50) PRIMARY KEY, "
-        columns += "c_class         VARCHAR(50), "
-        columns += "c_site_name     VARCHAR(50), "
-        columns += "c_date_updated  LONG "
-
-        # Finally, build our query 
-        query = "CREATE TABLE {} ({});".format(table_name, columns)
-
-        # And execute it using our database connection 
-        return self.perform(query)
-
-    # @desc     Setup the node device table
-    # @return   A boolean indicating success or failure
-    def setup_node_devices_table(self):
-        # Identify our target table
-        table_name = "t_node_device"
-
-        # Build up our columns
-        columns =  ""
-        columns += "c_addr          VARCHAR(17) PRIMARY KEY, "
-        columns += "c_node_id       VARCHAR(50), "
-        columns += "c_type          VARCHAR(50), "
-        columns += "c_state         VARCHAR(20), "
-        columns += "c_batt          FLOAT(5), "
-        columns += "c_lat           FLOAT(8), "
-        columns += "c_lon           FLOAT(8), "
-        columns += "c_last_scanned  LONG, "
-        columns += "c_last_comms    LONG, "
-        columns += "c_last_updated  LONG, "
-        columns += "c_activated     INTEGER, "
-        columns += "FOREIGN KEY(c_node_id) "
-        columns += "    REFERENCES t_node(c_node_id) "
-
-        # Finally, build our query 
-        query = "CREATE TABLE {} ({});".format(table_name, columns)
-
-        # And execute it using our database connection 
-        return self.perform(query)
-
-    # @desc     Setup the collection parameters table
-    # @return   A boolean indicating success or failure
-    def setup_collection_parameters(self):
-        # Identify our target table
-        table_name = "t_params"
-        
-        # Build up our columns
-        columns =  ""
-        columns += "c_id            INTEGER PRIMARY KEY, "
-        columns += "c_duration      FLOAT(5), "
-        columns += "c_interval      FLOAT(5), "
-        columns += "c_max_samples   INTEGER "
-
-        # Finally, build our query
-        query = "CREATE TABLE {} ({});".format(table_name, columns)
-
-        # And execute it using our database connection
-        return self.perform(query)
-
-    # @desc     Setup the entire database
-    # @return   A boolean indicating success or failure
-    def setup(self):
-        # Check if this database object is valid 
-        if self.dbconn == None:
-            self.logger.error("Invalid database")
-            return False
-
-        # Check if the required tables already exist. If so, return early 
-        if self.check_tables():
-            self.logger.debug("Database already set up")
-            return True
+    def get_nodes(self, name=None, node_class=None):
+        if name is not None and node_class is not None:
+            result = self.db_session.query(
+                Node).filter(and_(name=name, node_class=node_class)).first()
+        elif name is not None:
+            result = self.db_session.query(
+                Node).filter_by(name=name).first()
+        elif node_class is not None:
+            result = self.db_session.query(
+                Node).filter_by(node_class=node_class).all()
         else:
-            self.logger.debug("Database not yet set up")
+            result = self.db_session.query(
+                Node).all()
 
-        self.logger.info("Setting up the database...")
+        return self.get(name, result)
 
-        if self.setup_nodes_table() == False:
-            self.logger.error("Database setup failed: Nodes")
+    def delete_node(self, name):
+        matched_nodes = self.get_nodes(name=name)
+
+        if len(matched_nodes) <= 0:
+            print("No nodes matched: {}".format(name))
             return False
 
-        if self.setup_sessions_table() == False:
-            self.logger.error("Database setup failed: Sessions")
-            return False
+        target_node = matched_nodes[0]
 
-        if self.setup_node_devices_table() == False:
-            self.logger.error("Database setup failed: Node Devices")
-            return False
+        return self.delete(target_node)
 
-        if self.setup_collection_parameters() == False:
-            self.logger.error("Database setup failed: Collection Parameters")
-            return False
+    ##********************************##
+    ##            Device              ##
+    ##******************************* ##
+    def insert_or_update_device(self, address, node_id, device_type, power=-99.0):
+        node_device = NodeDevice(address=address, node_id=node_id,
+                                 device_type=device_type, power=power)
+        return self.insert_or_update(node_device)
 
-        if self.setup_data_cache_table() == False:
-            self.logger.error("Database setup failed: Data Cache")
-            return False
+    def get_devices(self, name=None, address=None, device_type=None):
+        target = self.db_session.query(NodeDevice)
 
-        self.logger.info("Database setup succesful")
-        return True
+        if address is not None:
+            target = target.filter_by(address=address).first()
 
-    # @desc     Check if the required tables are already present in the DB
-    # @return   A boolean indicating success or failure
-    def check_tables(self):
-        cur = self.dbconn.cursor()
-        # Check if the tables we want are already represented in the database 
-        try:
-            cur.execute("SELECT * FROM t_data_cache")
-        except sqlite3.OperationalError:
-            return False
-
-        try:
-            cur.execute("SELECT * FROM t_node")
-        except sqlite3.OperationalError:
-            return False
-
-        try:
-            cur.execute("SELECT * FROM t_node_device")
-        except sqlite3.OperationalError:
-            return False
-
-        try:
-            cur.execute("SELECT * FROM t_session")
-        except sqlite3.OperationalError:
-            return False
-
-        return True
-
-    ##**********************************##
-    ##  SEC02: Record Insert Functions  ##
-    ##********************************* ##
-    # @desc     Adds new node information to the table
-    # @return   A boolean indicating success or failure
-    def add_node(self, node_id, node_class, site_name = None, date_updated = None):
-        if not self.dbconn:
-            return False
-
-        table_name = "t_node"
-        columns = "c_node_id, c_class, c_site_name, c_date_updated"
-        values = (node_id, node_class, site_name, date_updated)
-
-        # Build our INSERT query 
-        query = "INSERT INTO {} ({}) VALUES (?, ?, ?, ?);".format(table_name, columns)
-
-        # And execute it using our database connection 
-        return self.perform(query, values)
-
-    # @desc     Adds new node device information to the table
-    # @return   A boolean indicating success or failure
-    def add_node_device(self, node_addr, node_id, node_type, battery= 0, lat = 0, lon = 0, last_scanned = 0, last_comms = 0, last_updated = 0, state = "UNKNOWN"):
-        if not self.dbconn:
-            return False
-
-        table_name = "t_node_device"
-        columns = "c_addr, c_node_id, c_type, c_batt, c_lat, c_lon, c_last_scanned, c_last_comms, c_last_updated, c_state"
-        values = (node_addr, node_id, node_type, battery, lat, lon, last_scanned, last_comms, last_updated, state)
-
-        # Build our INSERT query 
-        query = "INSERT INTO {} ({}) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?);".format(table_name, columns)
-
-        # And execute it using our database connection 
-        return self.perform(query, values)
-
-    # @desc     Starts a new sensor data capture session
-    # @return   A boolean indicating success or failure
-    def start_capture_session(self):
-        if not self.dbconn:
-            return False
-
-        table_name = "t_session"
-        columns = "c_start_time"
-        values = str( int(time.time()) ) 
-
-        # Build our INSERT query 
-        query = "INSERT INTO {} ({}) VALUES ({});".format(table_name, columns, values)
-
-        # And execute it using our database connection 
-        return self.perform(query)
-
-    # @desc     Adds / Updates a new sensor data record to the table
-    # @return   A boolean indicating success or failure
-    def add_data(self, session_id, source, content, node_type, dest=","):
-        if not self.dbconn:
-            return False
-
-        # Initializing flags on which data row to retrieve and update
-        lackingBluno = False
-        lackingParrot = False
-       
-        # Converting back content to its json format
-        content = json.loads(content)
+        if device_type is not None:
+            target = target.filter_by(device_type=device_type).all()
         
-        # Setting up flags for data retrieval
-        if node_type == ble.NTYPE_BLUNO:
-            cond = "c_source IS '{}' AND c_session_id IS {} AND c_ph IS NULL".format(source, session_id)
-            lackingBluno = True 
-        elif node_type == ble.NTYPE_PARROT:
-            cond = "c_source IS '{}' AND c_session_id IS {} AND c_soil_temp IS NULL".format(source, session_id)
-            lackingParrot = True
+        if name is not None:
+            target = target.filter_by(node_id=name).all()
 
-        # Retrieving last row with no parrot XOR no bluno data
-        last_row_arr = self.get_data(session_id=session_id, node_id=source, limit=1, cond=cond)
-        # If return is not empty, then there is a row to update 
-        if last_row_arr != []:
-            last_data_id = last_row_arr[0][0]
-            if lackingBluno:
-                self.update_data(data_id=last_data_id, node_type=node_type, ph=content["PH"]) 
-            elif lackingParrot:
-                self.update_data(data_id=last_data_id, node_type=node_type, sunlight=content["SUNLIGHT"], soil_temp=content["SOIL_TEMP"], air_temp=content["AIR_TEMP"], cal_air_temp=content["CAL_AIR_TEMP"], vwc=content["VWC"], cal_vwc=content["CAL_VWC"], soil_ec=content["SOIL_EC"], cal_ec_porous=content["CAL_EC_POROUS"], cal_ea=content["CAL_EA"], cal_ecb=content["CAL_ECB"], cal_dli=content["CAL_DLI"]) 
-            return     
-      
-        
-        # There is no row to update, continue to create new row
-        table_name = "t_data_cache"
-        # Varying insert values and query depending from the data source
-        if node_type == ble.NTYPE_BLUNO:
-            columns = "c_session_id, c_source, c_dest, c_ph, c_upload_time"
-            values = (session_id, source, dest, content["PH"], str( int(time.time()) )) 
-            query = "INSERT INTO {} ({}) VALUES (?, ?, ?, ?, ?);".format(table_name, columns)
-        elif node_type == ble.NTYPE_PARROT:
-            columns = "c_session_id, c_source, c_dest, c_sunlight, c_soil_temp,"
-            columns += "c_air_temp, c_cal_air_temp, c_vwc, c_cal_vwc, c_soil_ec, c_cal_ec_porous,"
-            columns += "c_cal_ea, c_cal_ecb, c_cal_dli, c_upload_time"
-            values = (session_id, source, dest, content["SUNLIGHT"], content["SOIL_TEMP"], content["AIR_TEMP"], content["CAL_AIR_TEMP"], content["VWC"], content["CAL_VWC"], content["SOIL_EC"], content["CAL_EC_POROUS"], content["CAL_EA"], content["CAL_ECB"], content["CAL_DLI"], str( int(time.time()) )) 
-            query = "INSERT INTO {} ({}) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?);".format(table_name, columns)
+        return self.get(address, target)
 
-        # And execute it using our database connection 
-        return self.perform(query, values)
-    
-    # @desc     Adds / Updates a new collection parameter settings
-    # @return   A boolean indicating success or failure
-    def add_collection_parameters(self, duration, interval, max_samples):
-        if not self.dbconn:
+    def delete_device(self, name):
+        matched_devices = self.get_devices(name=name)
+        if len(matched_devices) <= 0:
             return False
 
-        table_name = "t_params"
-        columns = "c_duration, c_interval, c_max_samples"
-        values = (duration, interval, max_samples) 
+        result = True
+        for target_device in matched_devices:
+            if self.delete(target_device) == False:
+                result = False
 
-        # Build our INSERT query 
-        query = "INSERT INTO {} ({}) VALUES (?, ?, ?);".format(table_name, columns)
+        return result
 
-        # And execute it using our database connection 
-        return self.perform(query, values)
+    ##********************************##
+    ##           Session              ##
+    ##******************************* ##
+    def start_session(self):
+        session = Session(start_time=str(int(time.time())), end_time=-1)
+        print(session)
+        return self.add(session)
 
-
-    ##*************************************##
-    ##  SEC03: Record Retrieval Functions  ##
-    ##************************************ ##
-    # @desc     Gets the current session ID
-    # @return   A boolean indicating success or failure
     def get_current_session(self):
-        query = "SELECT c_id FROM t_session WHERE c_end_time IS NULL"
-        result = self.perform(query)
-        if result == True or result == False:
-            return None
-
-        if len(result) == 0:
-            return None
-
-        return result[0][0]
-
-    # @desc     Gets the latest session ID
-    # @return   A boolean indicating success or failure
-    def get_latest_session(self):
-        query = "SELECT c_id FROM t_session ORDER BY c_id DESC LIMIT 1"
-        result = self.perform(query)
-        if result == True or result == False:
-            return None
-
-        if len(result) == 0:
-            return None
-
-        return result[0][0]
-        
-    # @desc     Gets the latest collection parameter settings
-    # @return   A boolean indicating success or failure
-    def get_latest_collection_parameters(self):
-        table = "t_params"
-        columns = "c_duration, c_interval, c_max_samples"
-       
-        query = "SELECT {} from {} ORDER BY c_id DESC LIMIT 1".format(table, columns)
-
-        result = self.perform(query)
-        if result == True or result == False:
-            return None
-
-        if len(result) == 0:
-            return None
-
-        return result[0][0]
-        
-    # @desc     Retrieve data from the t_data_cache table in our database with the ff
-    #           constraints on row return limit, row offset, and filter condition
-    # @return   A boolean indicating success or failure
-    def get_data(self, session_id=None, node_id=None, limit=0, offset=0, start_id=None, 
-                    end_id=None, unsent_only=False, cond=DEFAULT_GET_COND, summarize=False):
-
-        if not self.dbconn:
-            return False
-
-        # Returning summarized data
-        if summarize == True:
-            return self.get_summarized_data(limit, offset, cond)
-
-        # Build our SELECT query 
-        table_name = "t_data_cache AS td JOIN t_session AS ts ON td.c_session_id IS ts.c_id "
-        table_name += "JOIN t_node AS tn ON tn.c_node_id IS td.c_source JOIN t_node_device AS "
-        table_name += "tnd ON tnd.c_node_id IS tn.c_node_id"
-        columns = "td.c_id, td.c_source, ts.c_end_time, td.c_dest, td.c_ph, "
-        columns += "td.c_sunlight, td.c_soil_temp, td.c_air_temp, td.c_cal_air_temp, td.c_vwc, "
-        columns += "td.c_cal_vwc, td.c_soil_ec, td.c_cal_ec_porous, td.c_cal_ea, td.c_cal_ecb, "
-        columns += "td.c_cal_dli, tnd.c_node_id, tnd.c_lat, tnd.c_lon, tn.c_site_name " 
-        
-        # Add condition if start_id is not none
-        if start_id != None:
-            cond += " AND td.c_id >= %i" % (start_id)
-
-        # Add condition if end_id is not none
-        if end_id != None:
-            cond += " AND td.c_id <= %i" % (end_id) 
-
-        if unsent_only == True:
-            cond += " AND td.c_is_sent IS 0"
-        
-        # TODO: Identify why query doesnt return distinct records
-        query = "SELECT DISTINCT %s FROM %s WHERE %s ORDER BY td.c_id DESC" % (columns, table_name, cond)
-        
-        ## Add limit if no start_id and end_id are specified
-        #if start_id == None and end_id == None:
-        # Set our offset 
-        if limit == 0:
-            query += ";"
-        else:
-            query += " LIMIT %i OFFSET %i;" % (limit, offset)
-       
-        cur = self.dbconn.cursor()
-        result = None
         try:
-            cur.execute(query)
-            result = cur.fetchall()
-        except sqlite3.OperationalError as e:
-            print( "Failed to retrieve data: " + str(e) )
-            return None 
+            result = self.db_session.query(Session).order_by(
+                Session.id.desc()).filter(Session.end_time == -1)[-1]
+        except Exception as e:
+            print("No available open session")
+            return False
+        return result
+
+    def get_sessions(self, record_offset=0, record_limit=3):
+        result = []
+        try:
+            session_query = self.db_session.query(Session)\
+                                .order_by(Session.id.desc())\
+                                .limit(record_limit)\
+                                .offset(record_offset)
+
+            result = self.get("session_id", session_query)
+
+        except Exception as e:
+            print("No available open session")
+            return False
 
         return result
 
-    # TODO
-    def get_summarized_data(self, limit=0, offset=0, cond=DEFAULT_GET_COND):
-        if not self.dbconn:
+    def terminate_session(self):
+        result = self.get_current_session()
+        if result is False:
             return False
+        result.end_time = str(int(time.time()))
+        self.db_session.commit()
+        return True
 
-        last_session_id = self.get_latest_session()
+    ##********************************##
+    ##              Data              ##
+    ##******************************* ##
+    def get_data(self, id=None, session_id=None, limit=None, offset=None,
+                 start_id=0, end_id=100000000000000):
 
-        # Build our SELECT query 
-        table_name = "t_data_cache AS td JOIN t_session AS ts ON td.c_session_id = ts.c_id"
-        columns = "td.c_session_id, ' ', MAX(ts.c_end_time), GROUP_CONCAT(td.c_content,', '), ' '"
-        grouping = "td.c_session_id"
-        cond = "td.c_session_id = (SELECT MAX(td1.c_session_id) FROM t_data_cache AS td1)"
-        query = "SELECT {} FROM {} WHERE {} GROUP BY {}".format(columns, table_name, cond, grouping)
+        result = self.db_session.query(NodeData.id, Node.name,
+                                       Session.end_time, NodeData.content,
+                                       Node.lat, Node.lon, Node.site_name)\
+            .join(Session).join(Node, NodeData.source_id == Node.name).filter(
+                and_(NodeData.id >= start_id, NodeData.id <= end_id)).order_by(
+                NodeData.id)
 
-        # Set our offset 
-        if limit == 0:
-            query += ";"
-        else:
-            query += " LIMIT %i OFFSET %i;" % (limit, offset)
+        if offset is not None:
+            result = result[offset:]
 
-        cur = self.dbconn.cursor()
-        result = None
-        try:
-            cur.execute(query)
-            result = cur.fetchall()
-        except sqlite3.OperationalError as e:
-            print( "Failed to retrieve data: " + str(e) )
-            return None
+        if limit is not None:
+            result = result[:limit]
 
+        return self.get("data", result)
+
+    def add_data(self, blk_id, session_id, source_id, content, timestamp):
+        data = NodeData(blk_id=blk_id,
+                        session_id=session_id,
+                        source_id=source_id,
+                        content=content, timestamp=timestamp)
+        return self.add(data)
+
+    ##********************************##
+    ##           Session Data         ##
+    ##******************************* ##
+    def get_session_data(self, id=None, session_id=None, limit=None, 
+                         offset=None, start_id=0, end_id=100000000000000):
+
+        result = self.db_session.query(SessionData.id, 
+                                       SessionData.session_id, 
+                                       SessionData.source_id, 
+                                       SessionData.content,
+                                       SessionData.timestamp)\
+                                .filter(and_(SessionData.id >= start_id, 
+                                             SessionData.id <= end_id))\
+                                .order_by(SessionData.id)
+
+        if offset is not None:
+            result = result[offset:]
+        if limit is not None:
+            result = result[:limit]
         return result
 
-    # @desc        Queries in the database the details of self - cache node
-    #
-    # @return    Returns the list of the results containing details
-    def get_self_details(self):
-        if not self.dbconn:
-            return False
+    def add_session_data(self, source_id, content, timestamp):
+        data = SessionData(session_id=self.get_current_session().id, 
+                           source_id=source_id,
+                           content=content, 
+                           timestamp=timestamp)
+        return self.add(data)
 
-        table_name = "t_node_device"
-        columns =   "c_node_id, c_lat, c_lon, c_batt, c_last_scanned, c_last_comms, c_activated"
-        condition = 'c_type = "SELF"'
+    def clear_session_data(self):
+        self.db_session.query(SessionData).delete()
+        self.db_session.commit()
 
-        # Build our SELECT query 
-        query = "SELECT %s FROM %s WHERE %s" % (columns, table_name, condition)
+        return True
 
-        cur = self.dbconn.cursor()
-        result = None
-        try:
-            cur.execute(query)
-            result = cur.fetchall()
-        except sqlite3.OperationalError:
-            print("Failed to retrieve data")
-            return None
-        return result[0]
-    
-    # @desc        Queries in the database the details of self - cache node
-    # @return    Returns the list of the results containing details
-    def update_self_details(self, node_id=None, lat=None, lon=None, last_scanned=None, last_comms=None, site_name=None, state=None, activated=None):
-        if not self.dbconn:
-            return False
-        
-        update_map = [
-            ( 'c_lat = {}',        lat ),
-            ( 'c_lon = {}',        lon ),
-            ( 'c_last_scanned = {}',    last_scanned),
-            ( 'c_last_comms = {}', last_comms),
-            ( 'c_activated = {}', activated),
-        ]
 
-        is_first = True
-       
-        table_name = "t_node_device"
-        
-        update = ""
-        for template, value in update_map:
-            if not value == None:
-                if not is_first: 
-                    update += ", "
-                else:
-                    is_first = False
-            
-                update += template.format(value)
+    ##********************************##
+    ##             Event              ##
+    ##******************************* ##
+    def add_event(self, node_id, event_type, timestamp):
+        event = NodeEvent(
+            node_id=node_id, event_type=event_type, timestamp=timestamp)
+        return self.add(event)
 
-        #condition = 'c_node_id = "{}"'.format(node_id)
-        condition  = 'c_type = "SELF"'
-
-        # Build our SELECT query 
-        query = "UPDATE {} SET {} WHERE {}".format(table_name, update, condition)
-
-        result = self.perform(query)
-
-        if (result == False):
-            return result
-        
-        update_map = [
-            ( 'c_site_name = "{}"',    site_name ),
-            ( 'c_date_updated = {}', int(time.time()) ),
-        ]
-
-        is_first = True
-       
-        table_name = "t_node"
-        
-        update = ""
-        for template, value in update_map:
-            if not value == None:
-                if not is_first: 
-                    update += ", "
-                else:
-                    is_first = False
-            
-                update += template.format(value)
-
-        #condition = 'c_node_id = "{}"'.format(node_id)
-        condition  = 'c_class = "CACHE"'
-
-        # Build our SELECT query 
-        query = "UPDATE {} SET {} WHERE {}".format(table_name, update, condition)
-
-        return self.perform(query)
-
-    
-    # @desc     Gets stored information on a particular node from the t_known_nodes table in
-    #           database given a specific node id (e.g. a MAC address)
-    # @return   TODO
-    def get_node_device(self, device_addr):
-        if not self.dbconn:
-            return False
-
-        table_name = "t_node_device"
-        columns =   "c_addr, c_node_id, c_type, c_batt, "
-        columns +=  "c_lat, c_lon, c_last_scanned, c_last_comms "
-        condition = 'c_addr = "{}"'.format(device_addr)
-
-        # Build our SELECT query 
-        query = "SELECT %s FROM %s WHERE %s" % (columns, table_name, condition)
-
-        cur = self.dbconn.cursor()
-        result = None
-        try:
-            cur.execute(query)
-            result = cur.fetchall()
-        except sqlite3.OperationalError:
-            #print("Failed to retrieve data")
-            return None
-
+    def get_event(self, id):
+        result = self.db_session.query(NodeEvent).filter_by(id=id).first()
         return result
 
-    # @desc     Gets a list of node ids with node names from the t_known_nodes table in the 
-    #           database given a condition
-    # @return   
-    def get_nodes(self, condition=None):
-        if not self.dbconn:
-            return False
-
-        table_name = "t_node AS tn JOIN t_node_device AS td ON tn.c_node_id = td.c_node_id"
-        columns =   "td.c_addr, td.c_node_id, td.c_type, td.c_lat, td.c_lon, td.c_batt, "
-        columns +=  "tn.c_site_name, td.c_last_updated, td.c_last_scanned, td.c_last_comms, "
-        columns +=  "td.c_state, tn.c_class"
-        order = "td.c_node_id, td.c_type"
-
-        # Build our SELECT query 
-        query = "SELECT %s FROM %s WHERE %s ORDER BY %s;" % (columns, table_name, condition, order)
-        cur = self.dbconn.cursor()
-        result = None
-        try:
-            cur.execute(query)
-            result = cur.fetchall()
-        except sqlite3.OperationalError:
-            #print("Failed to retrieve data")
-            return None
-        return result
-
-
-    ##**********************************##
-    ##  SEC04: Record Update Functions  ##
-    ##********************************* ##
-    """
-        Flag data in the t_data_cache table as uploaded given a record id
-    """
-    def set_data_uploaded(self, rec_id):
-        if not self.dbconn:
-            return False
-
-        # Define the parts of our UPDATE query 
-        table_name = "t_data_cache"
-        update = "C_UPLOAD_TIME = %li" % (int(time.time()))
-        condition = "C_ID = %i" % (rec_id)
-
-        # Build our UPDATE query 
-        query = "UPDATE %s SET %s WHERE %s" % (table_name, update, condition)
-
-        # And execute it using our database connection 
-        return self.perform(query)
-
-    # @desc     Ends an ongoing sensor data capture session
-    # @return   A boolean indicating success or failure
-    def end_capture_session(self):
-        if not self.dbconn:
-            return False
-
-        table_name = "t_session"
-        update = "c_end_time = {}".format(int(time.time()))
-        condition = "c_end_time IS NULL"
-
-        # Build our INSERT query 
-        query = "UPDATE {} SET {} WHERE {};".format(table_name, update, condition)
-
-        # And execute it using our database connection 
-        return self.perform(query)
-
-    """
-        Update node info in the t_knmown_nodes table given a record id
-    """
-    def update_node_device(self, node_id=None, node_addr=None, node_type=None, lat=None, lon=None, batt=None, scan=None, comms=None, updated=None):
-        if not self.dbconn:
-            return False
-
-        # Map function arguments to column update templates
-        update_map = [
-            ( 'c_addr = "{}"',       node_addr ),
-            ( 'c_type = "{}"',       node_type ),
-            ( 'c_lat = {}',          lat ),
-            ( 'c_lon = {}',          lon ),
-            ( 'c_batt = {}',         batt ),
-            ( 'c_last_scanned = {}', scan ),
-            ( 'c_last_comms = {}',   comms ),
-            ( 'c_last_updated = {}', updated ),
-        ]
-        is_first = True
-
-        # Define the parts of our UPDATE query 
-        table_name = "t_node_device"
-        update = ""
-        for template, value in update_map:
-            if node_id == None:
-                if template == 'c_addr = "{}"':
-                    continue
-
-            if not value == None:
-                if not is_first:
-                    update += ", "
-                else:
-                    is_first = False
-                
-                update += template.format(value)
-        
-        condition = 'c_node_id IS NOT NULL'
-        if node_id != None:
-            condition = 'c_node_id = "{}"'.format(node_id)
-        elif node_addr != None:
-            condition = 'c_addr = "{}"'.format(node_addr)
-
-        # Build our UPDATE query 
-        query = "UPDATE {} SET {} WHERE {}".format(table_name, update, condition)
-
-        # And execute it using our database connection 
-        self.logger.debug(query)
-        return self.perform(query)
-
-    def update_node(self, node_id=None, node_class=None, site_name=None):
-        if not self.dbconn:
-            return False
-
-        # Map function arguments to column update templates
-        update_map = [
-            ( 'c_site_name = "{}"',   site_name ),
-            ( 'c_class = "{}"',      node_class ),
-            ( 'c_date_updated = "{}"', int(time.time()) ),
-        ]
-        is_first = True
-
-        # Define the parts of our UPDATE query 
-        table_name = "t_node"
-        update = ""
-        for template, value in update_map:
-            if not value == None:
-                if not is_first:
-                    update += ", "
-                else:
-                    is_first = False
-                
-                update += template.format(value)
-        
-        condition = 'c_node_id = "{}"'.format(node_id)
-
-        # Build our UPDATE query 
-        query = "UPDATE {} SET {} WHERE {}".format(table_name, update, condition)
-
-        # And execute it using our database connection 
-        return self.perform(query)
-
-    def update_sent_rows(self, row_ids=None):
-        if not self.dbconn:
-            return False
-
-        # Map function arguments to column update templates
-        update_map = [
-            ( 'c_is_sent = {}',   1),
-        ]
-        is_first = True
-
-        # Define the parts of our UPDATE query 
-        table_name = "t_data_cache"
-        update = ""
-        for template, value in update_map:
-            if not value == None:
-                if not is_first:
-                    update += ", "
-                else:
-                    is_first = False
-                
-                update += template.format(value)
-        
-        condition = 'c_id IN {}'.format(tuple(row_ids))
-
-        # Build our UPDATE query 
-        query = "UPDATE {} SET {} WHERE {}".format(table_name, update, condition)
-        self.logger.debug(query)
-        # And execute it using our database connection 
-        return self.perform(query)
-
-    def update_data(self, data_id=None, node_type=ble.NTYPE_PARROT, sunlight=None, soil_temp=None, air_temp=None, cal_air_temp=None, vwc=None, cal_vwc=None, soil_ec=None, cal_ec_porous=None, cal_ea=None, cal_ecb=None, cal_dli=None, ph=None):
-        
-        if not self.dbconn:
-            return False
-
-        # Map function arguments to column update templates
-        if node_type == ble.NTYPE_PARROT: 
-            update_map = [
-                ( 'c_sunlight = "{}"',      sunlight        ),
-                ( 'c_soil_temp = "{}"',     soil_temp       ),
-                ( 'c_air_temp = "{}"',      air_temp        ),
-                ( 'c_cal_air_temp = "{}"',  cal_air_temp    ),
-                ( 'c_vwc= "{}"',            vwc             ),
-                ( 'c_cal_vwc= "{}"',        cal_vwc         ),
-                ( 'c_soil_ec= "{}"',        soil_ec         ),
-                ( 'c_cal_ec_porous= "{}"',  cal_ec_porous   ),
-                ( 'c_cal_ea= "{}"',         cal_ea          ),
-                ( 'c_cal_ecb= "{}"',        cal_ecb         ),
-                ( 'c_cal_dli= "{}"',        cal_dli         ),
-            ]
-        
-        if node_type == ble.NTYPE_BLUNO:
-            update_map = [
-                ( 'c_ph = "{}"',            ph              ),
-            ]
-
-        is_first = True
-
-        # Define the parts of our UPDATE query 
-        table_name = "t_data_cache"
-        update = ""
-        for template, value in update_map:
-            if not value == None:
-                if not is_first:
-                    update += ", "
-                else:
-                    is_first = False
-                
-                update += template.format(value)
-        
-        condition = 'c_id = "{}"'.format(data_id)
-
-        # Build our UPDATE query 
-        query = "UPDATE {} SET {} WHERE {}".format(table_name, update, condition)
-
-        # And execute it using our database connection 
-        return self.perform(query)
-
-    def remove_node(self, node_id=None):
-        if not self.dbconn:
-            return False
-
-        condition = 'c_node_id = "{}"'.format(node_id)
-
-        # Delete from t_node_device 
-        table_name = 't_node_device'
-        query = "DELETE FROM {} WHERE {}".format(table_name, condition)
-        result = self.perform(query)
-
-        self.logger.info(query)
-        if result == False:
-            return result
-
-        # Delete from t_node 
-        table_name = 't_node'
-        query = "DELETE FROM {} WHERE {}".format(table_name, condition)
-
-        self.logger.info(query)
-        # And execute it using our database connection 
-        return self.perform(query)
-
+    def delete_event(self, id):
+        result = self.get_event(id)
+        return self.delete(result)
 

@@ -10,7 +10,7 @@ import time
 from queue import Queue
 from threading import Thread, Event
 
-from dryad.mobile_bt import MobileNode
+from dryad.mobile_node.mobile_bt import MobileNode
 
 class LinkListenerThread(Thread):
 
@@ -20,7 +20,7 @@ class LinkListenerThread(Thread):
         self.IDLE_TIMEOUT    = 120.0
         self.RECEIVE_TIMEOUT = self.SOCKET_TIMEOUT * 5.0
         self.MAX_RECEIVE_LEN = 2048
-        self.MSG_TERM = '\n'
+        self.MSG_TERMS = [ '\n', '\r', ';' ]
         self.MSG_SEP = ','
 
         self.request_hdl = request_handler
@@ -93,8 +93,9 @@ class LinkListenerThread(Thread):
 
             # If this data part contains the terminator, then we can return
             #   the data_buffer's contents to the calling context
-            if self.MSG_TERM in data_part:
-                return data_buf
+            for terminator in self.MSG_TERMS:
+                if terminator in data_part:
+                    return data_buf
 
             # If we've reached the maximum length of received data, then return
             #   the current data buffer contents to the calling context

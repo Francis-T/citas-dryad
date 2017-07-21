@@ -1,23 +1,86 @@
 #!/bin/bash
 
+CACHE_NODE_HOME=/home/pi/Programs/citas-dryad-v2/
+CACHE_NODE_SCRIPT_LOG=script_exec.log
+
+DETECT_I2C_HWCLK=$(sudo i2cdetect -y -a 1 | grep -e"60" | cut -d' ' -f 10)
+
+EXIT_RELOAD=2
+EXIT_REBOOT=3
+EXIT_POWEROFF=4
+
+# Wait for ~20 seconds while the RPi boots up
+echo -n "Waiting for system to start up...";
+if [ "$1" != "-q" ];
+then
+    for i in {0..20};
+    do
+        sleep 1;
+        echo -n .;
+    done;
+fi;
+echo $'\nDone.'
+
+cd $CACHE_NODE_HOME
+
+if [ ! -f $CACHE_NODE_SCRIPT_LOG ];
+then
+    touch $CACHE_NODE_SCRIPT_LOG;
+fi;
+
+echo "[$(date)] Started." >> $CACHE_NODE_SCRIPT_LOG;
+
+if [ "$DETECT_I2C_HWCLK" != "UU" ];
+then
+    echo "Setting up HW Clock..." >> $CACHE_NODE_SCRIPT_LOG
+    sudo modprobe i2c-dev;
+    sudo su -c  'echo "ds1307 0x68" > /sys/class/i2c-adapter/i2c-1/new_device';
+    sudo hwclock -s;
+else
+    echo "HW Clock detected." >> $CACHE_NODE_SCRIPT_LOG;
+fi;
+
+sudo hwclock -r
+
 # Set the HCI Config to PSCAN so that other devices can connect to it
-echo "Configuring Bluetooth adapter..."
-sudo hciconfig hci0 piscan
-echo "Done."
+echo "Configuring Bluetooth adapter..."  >> $CACHE_NODE_SCRIPT_LOG;
+sudo /bin/hciconfig hci1 down
+sudo /bin/hciconfig hci0 down
+sudo /bin/hciconfig hci0 up
+sudo /bin/hciconfig hci0 piscan
+echo "Done."  >> $CACHE_NODE_SCRIPT_LOG;
 
-echo "Powering off HDMI..."
-/usr/bin/tvservice -o
-echo "Done."
-
-#cd ~/Programs/python-projects/dryad-node/
+echo "Powering off HDMI..."  >> $CACHE_NODE_SCRIPT_LOG;
+# /usr/bin/tvservice -o
+echo "Done." >> $CACHE_NODE_SCRIPT_LOG;
 
 # Run the main program
-echo "Running program..."
-for i in {0..1};
+for i in {0..1000};
 do
-    echo "Iteration $i started."
-    sudo venv/bin/python main.py;
-    echo "Iteration $1 finished."
+    echo "Script started."  >> $CACHE_NODE_SCRIPT_LOG;
+    sudo /usr/bin/python3 main.py
+    RES_CODE=$(echo $?)
+    echo "Result = $RES_CODE"  >> $CACHE_NODE_SCRIPT_LOG;
+
+    if [ $RES_CODE -eq $EXIT_RELOAD ];
+    then
+        echo "Script finished. " >> $CACHE_NODE_SCRIPT_LOG;
+        echo "Reloading script..." >> $CACHE_NODE_SCRIPT_LOG;
+        continue;
+    fi;
+
+    echo "Script finished. "  >> $CACHE_NODE_SCRIPT_LOG;
+    break;
+
 done;
-echo "Program finished. "
+
+if [ $RES_CODE -eq $EXIT_REBOOT ];
+then
+    echo "Rebooting now"  >> $CACHE_NODE_SCRIPT_LOG;
+    sudo reboot
+elif [ $RES_CODE -eq $EXIT_POWEROFF ];
+then
+    echo "Shutting down now" >> $CACHE_NODE_SCRIPT_LOG;
+    sudo shutdown -h now
+fi;
 

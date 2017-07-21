@@ -1,4 +1,5 @@
 import enum
+
 from sqlalchemy import Integer, String, Float, Enum
 from sqlalchemy.orm import relationship
 from sqlalchemy.ext.declarative import declarative_base
@@ -51,12 +52,14 @@ class EnumWsnClass(enum.Enum):
     AGGREGATOR = "AGGREGATOR"
     SENSOR = "SENSOR"
     MOBILE = "MOBILE"
-
+    SELF = "SELF"
+    UNKNOWN = "UNKNOWN"
 
 class EnumDeviceType(enum.Enum):
     PARROT = "PARROT"
     BLUNO = "BLUNO"
     RPI = "RPI"
+    UNKNOWN = "UNKNOWN"
 
 
 class EnumEvents(enum.Enum):
@@ -107,8 +110,9 @@ class Node(Base):
     lon = Column(Float)
 
     def __repr__(self):
-        return "<Node(id={}, name={}, \
-        node_class={}>".format(self.id, self.name, self.node_class)
+        return "<Node(name={}, node_class={}, site_name={}, \
+        lat={}, lon={}>".format(self.name, self.node_class, self.site_name,
+                                self.lat, self.lon)
 
 
 class NodeDevice(Base):
@@ -117,30 +121,47 @@ class NodeDevice(Base):
     address = Column(String, primary_key=True)
     node_id = Column(String, ForeignKey('t_nodes.name'))
     device_type = Column(Enum(EnumDeviceType, validate_strings=True))
+    power = Column(Float)
 
     node = relationship("Node")
 
     def __repr__(self):
-        return "<NodeDevice(id={}, node_id={}, address={}, \
-        device_type={}>".format(self.id, self.node_id, self.address,
-                                self.device_type)
+        return "<NodeDevice(node_id={}, address={}, \
+        device_type={}, power={}>".format(self.node_id, self.address,
+                                          self.device_type, self.power)
 
 
 class NodeData(Base):
     __tablename__ = 't_node_data'
     id = Column(Integer, primary_key=True)
+    blk_id = Column(Integer, nullable=False)
     session_id = Column(Integer, ForeignKey('t_sessions.id'))
-    source_id = Column(String, ForeignKey('t_nodes.name'))
+    source_id = Column(String)
     content = Column(String)
     timestamp = Column(Integer)
 
     session = relationship("Session")
-    source = relationship("Node")
 
     def __repr__(self):
-        return "<NodeData(id={}, session_id={}, source_id={}, content={}, \
+        return "<NodeData(id={}, session_id={}, blk_id={}, source_id={}, content={}, \
+        timestamp={}>".format(self.id, self.session_id, self.blk_id,
+                              self.source_id, self.content, self.timestamp)
+
+class SessionData(Base):
+    __tablename__ = 't_session_data'
+    id = Column(Integer, primary_key=True)
+    session_id = Column(Integer, ForeignKey('t_sessions.id'))
+    source_id = Column(String)
+    content = Column(String)
+    timestamp = Column(Integer)
+
+    session = relationship("Session")
+
+    def __repr__(self):
+        return "<SessionData(id={}, session_id={}, source_id={}, content={}, \
         timestamp={}>".format(self.id, self.session_id, self.source_id,
                               self.content, self.timestamp)
+
 
 
 class NodeEvent(Base):
@@ -153,6 +174,7 @@ class NodeEvent(Base):
     node = relationship("Node")
 
     def __repr__(self):
-        return "<NodeData(id={}, node_id={}, event_type={}, \
+        return "<NodeEvent(id={}, node_id={}, event_type={}, \
         timestamp={}>".format(self.id, self.node_id, self.event_type,
                               self.timestamp)
+
