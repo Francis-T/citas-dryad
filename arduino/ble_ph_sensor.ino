@@ -1,4 +1,5 @@
 #include "string.h"
+#include "LowPower.h"
 
 #define TRUE  1
 #define FALSE 0
@@ -9,6 +10,7 @@
 
 #define DEF_NOTIF_INTERVAL    20000
 #define MAX_NOTIF_ACTIVE_TIME 360000
+#define CATCH_QUERY_DURATION  2000
 
 #define MATCHED 0
 
@@ -22,8 +24,12 @@ typedef enum {
 char  _aRecvBuf[20] = {};
 int   _iRecvIdx = 0;
 int   _bLiveNotif = FALSE;
+int   _bFirstActivate = TRUE;
 long  _lLastNotif = 0;
 long  _lNotifStartTime = 0;
+
+
+long  _lStartTime = 0;
 eState_t _eState = UNKNOWN;
 
 int utl_match(const char* s1, const char* s2, int iLen);
@@ -43,14 +49,28 @@ void setup() {
   Serial.begin(115200);
 
   pinMode(DEPLOY_STATUS_PIN, OUTPUT);
-  digitalWrite(DEPLOY_STATUS_PIN, HIGH);
+  digitalWrite(DEPLOY_STATUS_PIN, LOW);
 
+  pinMode(13, OUTPUT);
+
+  _lStartTime = millis();
   sys_setState(INACTIVE);
   //sys_setState(IDLE);
   return;
 }
 
 void loop() {
+  if (_bFirstActivate) {
+    digitalWrite(DEPLOY_STATUS_PIN, HIGH);
+    delay(50);
+    digitalWrite(DEPLOY_STATUS_PIN, LOW);
+    delay(50);
+    digitalWrite(DEPLOY_STATUS_PIN, HIGH);
+    delay(50);
+    digitalWrite(DEPLOY_STATUS_PIN, LOW);
+    _bFirstActivate = FALSE;
+  }
+  
   _iRecvIdx = 0;
   memset(_aRecvBuf, 0, sizeof(_aRecvBuf));
 
@@ -75,11 +95,20 @@ void loop() {
   }
 
   delay(90);
+  if((_lStartTime + CATCH_QUERY_DURATION) < millis()){ 
+    digitalWrite(DEPLOY_STATUS_PIN, HIGH);
+    delay(500);
+    digitalWrite(DEPLOY_STATUS_PIN, LOW);
+    _bFirstActivate = TRUE;
+    LowPower.powerDown(SLEEP_8S, ADC_OFF, BOD_OFF);
+    _lStartTime = millis();
+  }
   return;
 }
 
 int com_recv(char* aBuf) {
   if (Serial.available() > 0) {
+    _lStartTime = millis();
     char c = 1;
     while (c >= 0) {
       c = Serial.read();
@@ -96,10 +125,7 @@ int com_recv(char* aBuf) {
   return STATUS_OK;
 }
 
-int dat_liveNotif() {
-  /* If the current time since our last notif is greater than
-    DEF_NOTIF_INTERVAL, then send out a reading */
-  if ( (_lLastNotif + DEF_NOTIF_INTERVAL) < millis() ) {
+int dat_respSensor() {
     char aBaseStr[32];
     char aValStr[10];
     
@@ -120,7 +146,13 @@ int dat_liveNotif() {
     strcat(aBaseStr, ";");
     
     Serial.println(aBaseStr);
-    
+}
+
+int dat_liveNotif() {
+  /* If the current time since our last notif is greater than
+    DEF_NOTIF_INTERVAL, then send out a reading */
+  if ( (_lLastNotif + DEF_NOTIF_INTERVAL) < millis() ) {
+    dat_respSensor();
     _lLastNotif = millis();
   }
 
@@ -175,9 +207,11 @@ int dat_stopLiveNotif() {
 int req_read(char* pMsg, int iLen) {
   dat_resetLiveNotif();
   sys_setState(BUSY);
-  Serial.println(" RREAD:OK;");
-  delay(250);
-  Serial.println(" RDSTA:OK;"); 
+  //Serial.println(" RREAD:OK;");
+  delay(100);
+  dat_respSensor();
+  //Serial.println(" RDSTA:OK;");
+  sys_setState(IDLE);
   
   return STATUS_OK;
 }
@@ -199,7 +233,7 @@ int req_stop(char* aMsg, int iLen) {
 
 int req_deploy(char* pMsg, int iLen) {
   if (sys_getState() == INACTIVE) {
-    digitalWrite(DEPLOY_STATUS_PIN, LOW);
+//    digitalWrite(DEPLOY_STATUS_PIN, LOW);
     sys_setState(IDLE);
     Serial.println(" RDEPL:OK;");
   } else {
@@ -216,7 +250,7 @@ int req_undeploy(char* pMsg, int iLen) {
       /* Stop any ongoing read sessions when we undeploy */
       req_stop(pMsg, iLen);
       
-      digitalWrite(DEPLOY_STATUS_PIN, HIGH);
+//      digitalWrite(DEPLOY_STATUS_PIN, HIGH);
       sys_setState(INACTIVE);
       Serial.println(" RUNDP:OK;");
     } else {
