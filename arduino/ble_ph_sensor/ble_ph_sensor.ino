@@ -16,6 +16,7 @@
 
 #define DEPLOY_STATUS_PIN 2
 #define PH_SENSOR_PIN     A1
+#define BATT_LEVEL_PIN    A2
 
 typedef enum {
   UNKNOWN, INACTIVE, IDLE, BUSY
@@ -126,26 +127,37 @@ int com_recv(char* aBuf) {
 }
 
 int dat_respSensor() {
-    char aBaseStr[32];
-    char aValStr[10];
-    
-    memset(aBaseStr, 0, sizeof(aBaseStr));
-    memset(aValStr, 0, sizeof(aValStr));
+  char aBaseStr[32];
+  char aValStrPH[10];
+  char aValStrBatt[10];
+  
+  memset(aBaseStr, 0, sizeof(aBaseStr));
+  memset(aValStrPH, 0, sizeof(aValStrPH));
+  memset(aValStrBatt, 0, sizeof(aValStrBatt));
 
-//    float dVal = 14.0 * (random(20, 80) / 100.0);
+// float dVal = 14.0 * (random(20, 80) / 100.0);
 
-    int iAdcVal = analogRead(PH_SENSOR_PIN);
-    float dVoltage = (iAdcVal * 5.0) / 1024;
-    float dVal = dVoltage;
-    //float dVal = dVoltage * 2.2570 + 2.6675;
+  // PH data
+  int iAdcValPH = analogRead(PH_SENSOR_PIN);
+  float dVoltagePH = (iAdcValPH * 5.0) / 1024;
+  float dValPH = dVoltagePH;
+// float dValPH = dVoltagePH * 2.2570 + 2.6675;
 
-    dtostrf(dVal, 5, 2, aValStr);
-    
-    strcpy(aBaseStr, " RDATA:pH=");
-    strcat(aBaseStr, aValStr);
-    strcat(aBaseStr, ";");
-    
-    Serial.println(aBaseStr);
+  // Battery data
+  int dMaxBatt = 3.7;
+  int iAdcValBatt = analogRead(BATT_LEVEL_PIN);
+  float dValBatt = (iAdcValBatt * dMaxBatt / 2) / 1024;
+
+  dtostrf(dValPH, 5, 2, aValStrPH);
+  dtostrf(dValBatt, 5, 2, aValStrBatt);
+  
+  strcpy(aBaseStr, " RDATA:pH=");
+  strcat(aBaseStr, aValStrPH);
+  strcat(aBaseStr, ",batt=");
+  strcat(aBaseStr, aValStrBatt);
+  strcat(aBaseStr, ";");
+  
+  Serial.println(aBaseStr);
 }
 
 int dat_liveNotif() {

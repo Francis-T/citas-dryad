@@ -505,6 +505,8 @@ class RequestHandler():
 
             if 'ph' not in data_block['data']:
                 data_block['data']['ph'] = None
+            if 'batt' not in data_block['data']
+                data_block['data']['batt'] = None
 
             data.append(data_block)
 

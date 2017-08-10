@@ -67,7 +67,7 @@ class PeripheralDelegate(DefaultDelegate):
             if "pH" in data:
                 tr = transform.DataTransformation()
 
-                ph_data = data.split("=")[1].split(";")[0].strip()
+                ph_data = data.split("=")[1].split(",")[0].strip()
 
                 try:
                     if DEBUG_RAW_DATA == False:
@@ -78,9 +78,11 @@ class PeripheralDelegate(DefaultDelegate):
                     self.notify_error()
                     return
 
-                self.last_reading = { "ph" : ph_data, "ts": int(time.time()) }
+            if "batt" in data:
+                batt_data = data.split(",")[1].split(";")[0].strip()
 
             self.logger.debug("Received: {}".format( str(data) ))
+            self.last_reading = { "ph" : ph_data, "batt": batt_data, "ts": int(time.time()) }
 
         return
 
