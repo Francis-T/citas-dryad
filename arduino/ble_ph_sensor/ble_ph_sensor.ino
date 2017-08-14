@@ -127,7 +127,7 @@ int com_recv(char* aBuf) {
 }
 
 int dat_respSensor() {
-  char aBaseStr[32];
+  char aBaseStr[64];
   char aValStrPH[10];
   char aValStrBatt[10];
   
@@ -148,16 +148,19 @@ int dat_respSensor() {
   int iAdcValBatt = analogRead(BATT_LEVEL_PIN);
   float dValBatt = (iAdcValBatt * dMaxBatt / 2) / 1024;
 
-  dtostrf(dValPH, 5, 2, aValStrPH);
-  dtostrf(dValBatt, 5, 2, aValStrBatt);
+  dtostrf(dValPH, 6, 2, aValStrPH);
+  dtostrf(dValBatt, 6, 2, aValStrBatt);
   
-  strcpy(aBaseStr, " RDATA:pH=");
+  strcpy(aBaseStr, " RDATA: pH=");
   strcat(aBaseStr, aValStrPH);
-  strcat(aBaseStr, ",batt=");
+  strcat(aBaseStr, ";");
+  Serial.println(aBaseStr);
+  
+  strcpy(aBaseStr, " RDATA: bt=");
   strcat(aBaseStr, aValStrBatt);
   strcat(aBaseStr, ";");
-  
   Serial.println(aBaseStr);
+ 
 }
 
 int dat_liveNotif() {
