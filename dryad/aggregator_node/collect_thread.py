@@ -146,6 +146,7 @@ class CollectThread(Thread):
         db = DryadDatabase()
         
         session_data = db.get_session_data()
+        self.logger.debug(session_data)
 
         blk_count = 0
         curr_session = 0

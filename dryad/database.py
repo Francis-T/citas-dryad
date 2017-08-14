@@ -299,13 +299,13 @@ class DryadDatabase:
                                        SessionData.timestamp)\
                                 .filter(and_(SessionData.id >= start_id, 
                                              SessionData.id <= end_id))\
-                                .order_by(SessionData.id)
+                                .order_by(SessionData.source_id, SessionData.id)
 
         if offset is not None:
             result = result[offset:]
         if limit is not None:
             result = result[:limit]
-        return result
+        return self.get("data", result)
 
     def add_session_data(self, source_id, content, timestamp):
         data = SessionData(session_id=self.get_current_session().id, 

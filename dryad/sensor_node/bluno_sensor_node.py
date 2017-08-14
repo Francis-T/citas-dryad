@@ -53,7 +53,8 @@ class PeripheralDelegate(DefaultDelegate):
         return
 
     def handleNotification(self, cHandle, data):
-        data = str(data)
+        data = str(data.decode("utf-8"))
+
         if cHandle is SERIAL_HDL:
             if "RUNDP:OK" in data:
                 self.logger.info("[{}] Bluno: Undeployed".format(self.peripheral.get_name()))
@@ -67,7 +68,7 @@ class PeripheralDelegate(DefaultDelegate):
             if "pH" in data:
                 tr = transform.DataTransformation()
 
-                ph_data = data.split("=")[1].split(",")[0].strip()
+                ph_data = data.split("=")[1].split(";")[0].strip()
 
                 try:
                     if DEBUG_RAW_DATA == False:
@@ -77,12 +78,13 @@ class PeripheralDelegate(DefaultDelegate):
                         self.peripheral.get_name(), ph_data))
                     self.notify_error()
                     return
+                self.last_reading = {"ph": ph_data, "ts": int(time.time()) }
 
-            if "batt" in data:
-                batt_data = data.split(",")[1].split(";")[0].strip()
+            if "bt" in data:
+                batt_data = data.split("=")[1].split(";")[0].strip()
+                self.last_reading = {"bl_battery": batt_data, "ts": int(time.time()) }
 
             self.logger.debug("Received: {}".format( str(data) ))
-            self.last_reading = { "ph" : ph_data, "bl_battery": batt_data, "ts": int(time.time()) }
 
         return
 

@@ -7,7 +7,7 @@
 
 import logging
 
-from time import time, sleep
+from time import time, sleep, ctime
 from threading import Thread
 
 from dryad.database import DryadDatabase
@@ -135,7 +135,7 @@ class ReadThread(Thread): #, metaclass=ABCMeta):
         return
 
     def should_continue_read(self):
-        self.logger.debug("Read Status: {}, {}, {}".format(self.parent.is_connected, self.read_time, self.readings_left))
+        self.logger.debug("Read Status: {}, {}, {}".format(self.parent.is_connected, ctime(self.read_time), self.readings_left))
         # If we're no longer connected, then stop reading
         if self.parent.is_connected == False:
             return False

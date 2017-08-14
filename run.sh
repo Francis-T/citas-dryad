@@ -1,6 +1,6 @@
 #!/bin/bash
 
-CACHE_NODE_HOME=/home/pi/Programs/citas-dryad-v2/
+CACHE_NODE_HOME=/home/pi/Programs/citas-dryad/
 CACHE_NODE_SCRIPT_LOG=script_exec.log
 
 DETECT_I2C_HWCLK=$(sudo i2cdetect -y -a 1 | grep -e"60" | cut -d' ' -f 10)
