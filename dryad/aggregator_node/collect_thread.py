@@ -151,7 +151,7 @@ class CollectThread(Thread):
         blk_count = 0
         curr_session = 0
         prev_session = 0
-        data_block = {}
+        data_blocks = [{}]
         for reading in session_data:
             # Save the current session id
             curr_session = reading.session_id
@@ -187,6 +187,7 @@ class CollectThread(Thread):
             else:
                 data_block[data_type] = data_val
 
+            data_block[data_type] = data_val
         # If the last data block is non-empty, then offload its contents to the
         #   archive as well
         if len(data_block) > 0:

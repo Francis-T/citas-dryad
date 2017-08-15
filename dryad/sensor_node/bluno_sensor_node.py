@@ -84,7 +84,7 @@ class PeripheralDelegate(DefaultDelegate):
                 batt_data = data.split("=")[1].split(";")[0].strip()
                 self.last_reading = {"bl_battery": batt_data, "ts": int(time.time()) }
 
-            self.logger.debug("Received: {}".format( str(data) ))
+            self.logger.debug("[{}] Received: {}".format( self.peripheral.get_name(), str(data) ))
 
         return
 
@@ -240,7 +240,7 @@ class BlunoSensorNode(BleSensorNode):
 
         try:
             serial.write(str.encode(contents))
-            self.logger.debug("Sent data: {}".format(contents))
+            self.logger.debug("[{}] Sent data: {}".format(self.get_name(), contents))
         except Exception as err:
             self.logger.exception(err)
             return False
