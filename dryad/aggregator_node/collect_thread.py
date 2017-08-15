@@ -159,38 +159,38 @@ class CollectThread(Thread):
             # Extract the data type and value from the 'content' string
             data_type = reading.content.split(":")[0].strip()
             data_val  = reading.content.split(":")[1].strip()
+            data_source_id = reading.source_id
 
-            # If this particular data type has already been stored in this
-            #  data block, then we should create a new block for it instead
-            if data_type in data_block.keys():
-                # Reset block counter when transitioning from one session to
-                #   the next. This ideally should not happen since data offload
-                #   happens immediately after collection anyway but this is a
-                #   good precaution in case of unexpected crashes.
-                if (curr_session != prev_session):
-                    prev_session = curr_session
-                    blk_count = 0
+            ith_block = 0
+            while ith_block <= len(data_blocks):
+                if data_blocks[i]["source_id"] == data_source_id:
+                    if data_type in data_blocks[i].keys():
+                        ith_block += 1
+                    elif len(data_blocks[i].keys()) is 14:  # number of elements + source_id
+                        del data_block["source_id"]
+                        
+                        if (curr_session != prev_session):
+                            prev_session = curr_session
+                            blk_count = 0
 
-                # Increase the block count for this session
-                blk_count += 1
+                        # Increase the block count for this session
+                        blk_count += 1
 
-                # Save the block to the database
-                db.add_data( blk_id=blk_count,
-                             session_id=reading.session_id,
-                             source_id=reading.source_id,
-                             content=str(data_block),
-                             timestamp=reading.timestamp )
+                        # Save the block to the database
+                        db.add_data( blk_id=blk_count,
+                                     session_id=reading.session_id,
+                                     source_id=reading.source_id,
+                                     content=str(data_block),
+                                     timestamp=reading.timestamp )
 
-                # Create a new blank data block
-                data_block = {}
+                    else:
+                        data_blocks[i][data_type] = data_val 
+                else:
+                    ith_block += 1
+            data_blocks.append({data_type: data_val, data_source: data_source_id})
 
-            else:
-                data_block[data_type] = data_val
-
-            data_block[data_type] = data_val
-        # If the last data block is non-empty, then offload its contents to the
-        #   archive as well
-        if len(data_block) > 0:
+        for data_block in data_blocks:
+            del data_block["source_id"]
             if (curr_session != prev_session):
                 prev_session = curr_session
                 blk_count = 0
