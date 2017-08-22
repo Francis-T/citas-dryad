@@ -1,0 +1,13 @@
+set expandtab
+set smarttab
+set shiftwidth=4
+set tabstop=4
+
+set ignorecase
+set smartcase
+set hlsearch
+set incsearch
+
+set number
+set nowrap
+syntax on

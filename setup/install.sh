@@ -36,12 +36,18 @@ sudo apt-get -y install python-dev pkg-config libboost-python-dev libboost-threa
 echo "Installing sqlite3"
 sudo apt-get install sqlite3
 
-creation and activation of virtual environment with default python interpreter of python3.4
+#creation and activation of virtual environment with default python interpreter of python3.4
 sudo pip install virtualenv
 virtualenv -p /usr/bin/python3.4 venv
 . venv/bin/activate
 
 # installation of required python modules
+echo "Installing required python modules"
 sudo pip3 install -r requirements.txt
 sudo pip3 install pybluez
 sudo pip3 install bluepy
+
+# installation of vim and setup of vimrc
+echo "Installing vim editor and setting up vimrc"
+sudo apt-get -y install vim
+cat vimrc_setup.txt > ~/.vimrc
