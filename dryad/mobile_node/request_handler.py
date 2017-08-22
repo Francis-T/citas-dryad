@@ -502,11 +502,17 @@ class RequestHandler():
             data_block['timestamp'] = reading.end_time
             data_block['sampling_site'] = reading.site_name # TODO
             data_block['data'] = json.loads(reading.content.replace("'",'"'))
+            data_block['origin'] = { 'name' : reading.name, 
+                                     'lat'  : reading.lat,
+                                     'lon'  : reading.lon,
+                                     'addr' : "---" }
+
 
             if 'ph' not in data_block['data']:
                 data_block['data']['ph'] = None
-            if 'bl_battery' not in data_block['data']:
-                data_block['data']['batt'] = None
+
+            if 'bl_batt' not in data_block['data']:
+                data_block['data']['bl_batt'] = None
 
             data.append(data_block)
 
@@ -524,7 +530,7 @@ class RequestHandler():
             return False
 
         req_hdr = req_parts[0]
-        req_content = req_parts[1].strip(';').strip()
+        req_content = req_parts[1].strip().strip(';')
 
         result = False
         for handler in self.request_handler_tbl:

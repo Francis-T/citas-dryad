@@ -82,7 +82,7 @@ class PeripheralDelegate(DefaultDelegate):
 
             if "bt" in data:
                 batt_data = data.split("=")[1].split(";")[0].strip()
-                self.last_reading = {"bl_battery": batt_data, "ts": int(time.time()) }
+                self.last_reading = {"bl_batt": batt_data, "ts": int(time.time()) }
 
             self.logger.debug("[{}] Received: {}".format( self.peripheral.get_name(), str(data) ))
 
