@@ -524,7 +524,7 @@ class RequestHandler():
             return False
 
         req_hdr = req_parts[0]
-        req_content = req_parts[1].strip(';').strip()
+        req_content = req_parts[1].strip().strip(';')
 
         result = False
         for handler in self.request_handler_tbl:
