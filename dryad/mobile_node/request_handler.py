@@ -58,6 +58,8 @@ class RequestHandler():
         # Retrive details about the cache node from the database
         db = DryadDatabase()
         node_matches = db.get_nodes(node_class='SELF')
+        data = db.get_data()
+        
         if len(node_matches) <= 0:
             db.close_session()
             self.logger.error("Failed to load data for 'SELF'")
@@ -74,7 +76,8 @@ class RequestHandler():
         # Format the string to return
         state =  "'name':'{}','state':'{}','batt':{},'version':'{}',"
         state += "'lat':{},'lon':{},'sys_time':'{}','uptime':'{}',"
-        state += "'next_sleep_time':'{}','next_collect_time':'{}'"
+        state += "'next_sleep_time':'{}','next_collect_time':'{}',"
+        state += "'size':{}"
         state = state.format( node_data.name,
                               self.task_node.get_state_str(),
                               -99.0, 
@@ -84,7 +87,8 @@ class RequestHandler():
                               ctime(),
                               self_uptime,
                               ctime(self.task_node.get_idle_out_time()),
-                              ctime(self.task_node.get_collect_time()))
+                              ctime(self.task_node.get_collect_time()),
+                              len(data))
         
         return link.send_response("RSTAT:{" + state + "};\r\n")
 

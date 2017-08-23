@@ -30,6 +30,16 @@ fi;
 
 echo "[$(date)] Started." >> $CACHE_NODE_SCRIPT_LOG;
 
+CUR_HOUR=$(date "+%H")
+
+if [ ${CUR_HOUR#0} -ge 17 ] || [ ${CUR_HOUR#0} -ge 0 -a ${CUR_HOUR#0} -le 8 ];
+then
+    echo "Outside operation hours" >> $CACHE_NODE_SCRIPT_LOG; 
+    echo "Shutting down now" >> $CACHE_NODE_SCRIPT_LOG;
+    #sudo shutdown -h now
+fi;
+
+
 if [ "$DETECT_I2C_HWCLK" != "UU" ];
 then
     echo "Setting up HW Clock..." >> $CACHE_NODE_SCRIPT_LOG
