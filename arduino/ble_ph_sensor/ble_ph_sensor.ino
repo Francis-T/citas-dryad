@@ -134,22 +134,17 @@ int dat_respSensor() {
   memset(aBaseStr, 0, sizeof(aBaseStr));
   memset(aValStrPH, 0, sizeof(aValStrPH));
   memset(aValStrBatt, 0, sizeof(aValStrBatt));
-
-// float dVal = 14.0 * (random(20, 80) / 100.0);
-
   // PH data
   int iAdcValPH = analogRead(PH_SENSOR_PIN);
-  float dVoltagePH = (iAdcValPH * 5.0) / 1024;
-  float dValPH = dVoltagePH;
-// float dValPH = dVoltagePH * 2.2570 + 2.6675;
+//  float dValPH = (iAdcValPH * 5.0) / 1024;
+
 
   // Battery data
-  int dMaxBatt = 3.7;
   int iAdcValBatt = analogRead(BATT_LEVEL_PIN);
-  float dValBatt = (iAdcValBatt * dMaxBatt / 2) / 1024;
+//  float dValBatt = 2 * iAdcValBatt * 4.87 / (2.0 * 997.376);
 
-  dtostrf(dValPH, 6, 2, aValStrPH);
-  dtostrf(dValBatt, 6, 2, aValStrBatt);
+  dtostrf(iAdcValPH, 6, 2, aValStrPH);
+  dtostrf(iAdcValBatt, 6, 2, aValStrBatt);
   
   strcpy(aBaseStr, " RDATA: pH=");
   strcat(aBaseStr, aValStrPH);
