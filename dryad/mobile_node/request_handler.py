@@ -99,19 +99,26 @@ class RequestHandler():
         content = content.strip(';')
         update_args = content.split(',')
 
-        upd_flag = 0
         for arg in update_args:
+            # date update format
+            upd_format = "+%Y%m%d"
+     
             val = arg.split('=')[1]
-            if "date" in arg:
-                upd_flag = subprocess.call(['sudo', 'date', '+%Y%m%d', '-s', val]) 
-            elif "time" in arg:
-                upd_flag = subprocess.call(['sudo', 'date', '+%T', '-s', val]) 
 
-        if upd_flag == 0:
-            self.logger.error("Failed to update time with request: {}".format(content))
-            return link.send_response("QTSET:FAIL;\r\n")
+            # change update format to time if time update is being requested
+            if "time" in arg:
+                upd_format = "+%T"
 
-        self.logger.info("Updating time successful with {}".format(content))
+            date_update_flag = subprocess.call(["sudo", "date", upd_format, '-s', val]) 
+            hwclock_update_flag = subprocess.call(["sudo", "hwclock", "-s"])
+    
+            # check if updating is success
+            if date_update_flag & hwclock_update_flag != 0:
+                self.logger.error("Failed to update time with request: {}".format(content))
+                return link.send_response("QTSET:FAIL;\r\n")
+
+        updated_datetime = subprocess.check_output(["sudo", "hwclock"]) 
+        self.logger.info("Datetime updated to {}".format(updated_datetime))
         return link.send_response("QTSET:OK;\r\n")
  
     def handle_req_param_list(self, link, content):

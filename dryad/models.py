@@ -162,8 +162,6 @@ class SessionData(Base):
         timestamp={}>".format(self.id, self.session_id, self.source_id,
                               self.content, self.timestamp)
 
-
-
 class NodeEvent(Base):
     __tablename__ = 't_node_events'
     id = Column(Integer, primary_key=True)
@@ -178,3 +176,11 @@ class NodeEvent(Base):
         timestamp={}>".format(self.id, self.node_id, self.event_type,
                               self.timestamp)
 
+class Exception(Base):
+    __tablename__ = 't_exception'
+    id = Column(Integer, primary_key=True)
+    message = Column(String)
+
+    def __repr__(self):
+        return "<Exception(id={}, message={}>".format(self.id, self.message) 
+    
