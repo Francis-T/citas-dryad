@@ -65,24 +65,24 @@ class PeripheralDelegate(DefaultDelegate):
             if "RDEND:OK" in data:
                 self.notify_done()
 
-            if "pH" in data:
+            if "pH" in data or "bt" in data:
                 tr = transform.DataTransformation()
 
-                ph_data = data.split("=")[1].split(";")[0].strip()
+                key = "ph" if "pH" in data else "bl_batt"
+                val = data.split("=")[1].split(";")[0].strip()
 
                 try:
                     if DEBUG_RAW_DATA == False:
-                        ph_data = tr.conv_ph(float(ph_data))
+                        if key is "ph":
+                            val = tr.conv_ph(float(val))
+                        else:
+                            val = tr.conv_batt(float(val))
                 except:
-                    self.logger.error("[{}] Cannot convert ph data ({}) to float".format(
-                        self.peripheral.get_name(), ph_data))
+                    self.logger.error("[{}] Cannot convert {} data ({}) to float".format(
+                        self.peripheral.get_name(), key,  val))
                     self.notify_error()
                     return
-                self.last_reading = {"ph": ph_data, "ts": int(time.time()) }
-
-            if "bt" in data:
-                batt_data = data.split("=")[1].split(";")[0].strip()
-                self.last_reading = {"bl_batt": batt_data, "ts": int(time.time()) }
+                self.last_reading = {key: val, "ts": int(time.time()) }
 
             self.logger.debug("[{}] Received: {}".format( self.peripheral.get_name(), str(data) ))
 
