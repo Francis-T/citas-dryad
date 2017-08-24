@@ -72,11 +72,10 @@ class PeripheralDelegate(DefaultDelegate):
                 val = data.split("=")[1].split(";")[0].strip()
 
                 try:
-                    if DEBUG_RAW_DATA == False:
-                        if key is "ph":
-                            val = tr.conv_ph(float(val))
-                        else:
-                            val = tr.conv_batt(float(val))
+                    if key is "ph":
+                        val = tr.conv_ph(float(val))
+                    else:
+                        val = tr.conv_batt(float(val))
                 except:
                     self.logger.error("[{}] Cannot convert {} data ({}) to float".format(
                         self.peripheral.get_name(), key,  val))
