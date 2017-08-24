@@ -14,7 +14,7 @@ class DataTransformation():
 
     def conv_batt(self, adc_val):
         max_batt = 4.87
-        val = 2 * adc_val * max_batt / (2.0 * 997.376)
+        val = 2 * adc_val * max_batt / (997.376)
         return val
 
     def conv_temp(self, val):
