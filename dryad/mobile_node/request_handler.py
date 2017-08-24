@@ -7,6 +7,7 @@ import logging
 import json
 import pprint
 import os
+import subprocess
 
 import dryad.sys_info as sys_info
 
@@ -29,6 +30,7 @@ class RequestHandler():
     def __init__(self, node):
         self.request_handler_tbl = [
             { "req_hdr" : "QSTAT", "function" : self.handle_req_state },
+            { "req_hdr" : "QTSET", "function" : self.handle_req_dtime_set },
             { "req_hdr" : "QACTV", "function" : self.handle_req_activate },
             { "req_hdr" : "QDEAC", "function" : self.handle_req_deactivate },
             { "req_hdr" : "QASCP", "function" : self.handle_req_add_collection_params },
@@ -92,6 +94,26 @@ class RequestHandler():
         
         return link.send_response("RSTAT:{" + state + "};\r\n")
 
+    def handle_req_dtime_set(self, link, content):
+        # splitting arguments
+        content = content.strip(';')
+        update_args = content.split(',')
+
+        upd_flag = 0
+        for arg in update_args:
+            val = arg.split('=')[1]
+            if "date" in arg:
+                upd_flag = subprocess.call(['sudo', 'date', '+%Y%m%d', '-s', val]) 
+            elif "time" in arg:
+                upd_flag = subprocess.call(['sudo', 'date', '+%T', '-s', val]) 
+
+        if upd_flag == 0:
+            self.logger.error("Failed to update time with request: {}".format(content))
+            return link.send_response("QTSET:FAIL;\r\n")
+
+        self.logger.info("Updating time successful with {}".format(content))
+        return link.send_response("QTSET:OK;\r\n")
+ 
     def handle_req_param_list(self, link, content):
         params = None
 
@@ -132,8 +154,7 @@ class RequestHandler():
 
     def handle_req_add_collection_params(self, link, content):
         # remove trailing ";" 
-        if ";" in content:
-            content = content[:-1]
+        content = content.strip(';')
 
         params_args = content.split(',')
 
@@ -159,8 +180,7 @@ class RequestHandler():
         }
 
         # remove trailing ";" 
-        if ";" in content:
-            content = content[:-1]
+        content = content.strip(';')
 
         update_args = content.split(',')
         
