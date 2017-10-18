@@ -68,6 +68,14 @@ echo "Done." >> $CACHE_NODE_SCRIPT_LOG;
 for i in {0..1000};
 do
     echo "Script started."  >> $CACHE_NODE_SCRIPT_LOG;
+
+    WIFI_MODE=$(gpio read 4)
+    if [ WIFI_MODE -eq 1 ];
+    then
+        FLASK_APP=server.py
+        python -m flask run --host=0.0.0.0
+    fi;
+
     sudo /usr/bin/python3 main.py
     RES_CODE=$(echo $?)
     echo "Result = $RES_CODE"  >> $CACHE_NODE_SCRIPT_LOG;

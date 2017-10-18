@@ -14,6 +14,7 @@ from threading import Event, Timer, Lock, Thread
 from dryad.aggregator_node.collect_thread import CollectThread
 from dryad.database import DryadDatabase
 from dryad.aggregator_node.network import BaseAggregatorNodeNetwork
+from dryad.external_switches import ExternalSwitch
 
 TASK_EVENT_TIMEOUT      = 120.0
 
@@ -141,9 +142,15 @@ class AggregatorNode(BaseAggregatorNodeNetwork):
         if self.set_idle_out_timer() != RESULT_OK:
             self.logger.error("Failed to set idle out timer")
 
-        if self.deployment_status == STATUS_DEPLOYED:
-            # TODO Needs refactoring
+        # if self.deployment_status == STATUS_DEPLOYED:
+        #     # TODO Needs refactoring
+        #     self.add_task("ACTIVATE")
+        
+        ext_sw = ExternalSwitch()
+        if (ext_sw.is_node_activated()):
             self.add_task("ACTIVATE")
+        else:
+            self.add_task("DEACTIVATE")
             
         return
 
