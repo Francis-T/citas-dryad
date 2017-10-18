@@ -72,8 +72,12 @@ do
     WIFI_MODE=$(gpio read 4)
     if [ WIFI_MODE -eq 1 ];
     then
-        FLASK_APP=server.py
-        python -m flask run --host=0.0.0.0
+        ACTIVE_SERVERS=$(ps u -C python3 | grep flask)
+        if [ "$ACTIVE_SERVERS" != "" ];
+        then
+            FLASK_APP=server.py
+            python -m flask run --host=0.0.0.0
+        fi;
     fi;
 
     sudo /usr/bin/python3 main.py
