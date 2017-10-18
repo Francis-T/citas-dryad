@@ -1,0 +1,18 @@
+<html>
+<head><title>Aggregator Node Command</title></head>
+<body>
+
+    <form action="/command" method="post">
+        <p>Enter Command:</p>
+        <p><input type="text" name="cmd"></p>
+        <p><input type="submit" value"Execute"></p>
+    </form>
+
+    {% if response %}
+    <p>
+        {{ response }}
+    </p>
+    {% endif %}
+
+</body>
+</html>

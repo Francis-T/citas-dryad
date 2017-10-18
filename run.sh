@@ -70,13 +70,13 @@ do
     echo "Script started."  >> $CACHE_NODE_SCRIPT_LOG;
 
     WIFI_MODE=$(gpio read 4)
-    if [ WIFI_MODE -eq 1 ];
+    if [ $WIFI_MODE -eq 0 ];
     then
         ACTIVE_SERVERS=$(ps u -C python3 | grep flask)
-        if [ "$ACTIVE_SERVERS" != "" ];
+        if [ "$ACTIVE_SERVERS" = "" ];
         then
-            FLASK_APP=server.py
-            python -m flask run --host=0.0.0.0
+            export FLASK_APP=server.py
+            python3 -m flask run --host=0.0.0.0 &
         fi;
     fi;
 

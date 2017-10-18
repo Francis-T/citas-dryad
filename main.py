@@ -7,9 +7,8 @@
 import logging
 
 from threading import Event, Thread
-#from dryad.parrot_sensor_node import ParrotSensorNode
-#from dryad.bluno_sensor_node import BlunoSensorNode
 from dryad.mobile_node.link_listener import LinkListenerThread
+from dryad.flask_link.flask_listener import FlaskListenerThread
 from dryad.mobile_node.request_handler import RequestHandler
 from dryad.aggregator_node.core import AggregatorNode
 
@@ -101,6 +100,10 @@ class DryadMain():
         listen_thread = LinkListenerThread(rqh)
         listen_thread.start()
 
+        # Initialize the Flask Listener Thread
+        flask_listen_thread = FlaskListenerThread(rqh)
+        flask_listen_thread.start()
+
         # Initialize the Console Input Thread
         if DEBUG_CONSOLE_ENABLED:
             input_thread = InputThread(agn, rqh)
@@ -116,6 +119,7 @@ class DryadMain():
         if DEBUG_CONSOLE_ENABLED:
             input_thread.cancel()
 
+        flask_listen_thread.cancel()
         listen_thread.cancel()
 
         return result
