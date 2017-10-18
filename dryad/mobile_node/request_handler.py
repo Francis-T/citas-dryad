@@ -99,27 +99,30 @@ class RequestHandler():
         content = content.strip(';')
         update_args = content.split(',')
 
-        for arg in update_args:
-            # date update format
-            upd_format = "+%Y%m%d"
-     
-            val = arg.split('=')[1]
+        if len(update_args) > 0:
+            for arg in update_args:
+                if "=" in arg:
+                    # date update format
+                    upd_format = "+%Y%m%d"
+                    val = arg.split('=')[1]
 
-            # change update format to time if time update is being requested
-            if "time" in arg:
-                upd_format = "+%T"
+                    # change update format to time if time update is being requested
+                    if "time" in arg:
+                        upd_format = "+%T"
 
-            date_update_flag = subprocess.call(["sudo", "date", upd_format, '-s', val]) 
-            hwclock_update_flag = subprocess.call(["sudo", "hwclock", "-s"])
-    
-            # check if updating is success
-            if date_update_flag & hwclock_update_flag != 0:
-                self.logger.error("Failed to update time with request: {}".format(content))
-                return link.send_response("QTSET:FAIL;\r\n")
+                    date_update_flag = subprocess.call(["sudo", "date", upd_format, '-s', val]) 
+                    hwclock_update_flag = subprocess.call(["sudo", "hwclock", "-w"])
+            
+                    # check if updating is success
+                    if date_update_flag != 0 or hwclock_update_flag != 0:
+                        self.logger.error("Failed to update time with request: {}".format(content))
+                        return link.send_response("QTSET:FAIL;\r\n")
 
-        updated_datetime = subprocess.check_output(["sudo", "hwclock"]) 
-        self.logger.info("Datetime updated to {}".format(updated_datetime))
-        return link.send_response("QTSET:OK;\r\n")
+                    updated_datetime = subprocess.check_output(["sudo", "hwclock"]) 
+                    self.logger.info("Datetime updated to {}".format(updated_datetime))
+                    return link.send_response("QTSET:OK;\r\n")
+
+        return link.send_response("QTSET:FAIL;\r\n")
  
     def handle_req_param_list(self, link, content):
         params = None
