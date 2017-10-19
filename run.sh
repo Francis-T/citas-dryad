@@ -76,7 +76,10 @@ do
     if [ "$ACTIVE_SERVERS" = "" ];
     then
         export FLASK_APP=server.py
-        python3 -m flask run --host=0.0.0.0 &
+        export FLASK_DEBUG=1
+        export LC_ALL=C.UTF-8
+        export LANG=C.UTF-8
+        sudo -E /usr/bin/python3 -m flask run --host=0.0.0.0 &
     fi;
     # fi;
 

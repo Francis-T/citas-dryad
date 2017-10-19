@@ -2,9 +2,12 @@ from flask import Flask, request, render_template
 from threading import Thread
 from time import sleep
 import socket
+import logging
 
 HOST = 'localhost'        # Symbolic name meaning all available interfaces
 PORT = 50007              # Arbitrary non-privileged port
+
+logger = None
 
 available_commands = [
     { "cmd_name" : "QSTAT", "desc" : "Retrieves the system status" },
@@ -123,5 +126,28 @@ def shutdown_server():
     if func is None:
         raise RuntimeError('Not running with the Werkzeug Server')
     func()
+    return
+
+def init_logger(self):
+    logger = logging.getLogger("server")
+    logger.setLevel(logging.DEBUG)
+
+    # console handler
+    ch = logging.StreamHandler()
+    ch.setLevel(logging.DEBUG)
+
+    # formatter
+    formatter = logging.Formatter("%(asctime)s - [%(levelname)s] [%(threadName)s] (%(module)s:%(lineno)d) %(message)s") 
+ 
+    fh = logging.FileHandler("cache_node.log")
+
+    # ch setting
+    ch.setFormatter(formatter)
+    self.logger.addHandler(ch)   
+
+    # fh setting
+    fh.setFormatter(formatter)
+    self.logger.addHandler(fh) 
+
     return
 
