@@ -69,6 +69,15 @@ def status():
 
     return str(resp)
 
+@app.route('/halt')
+def halt():
+    shutdown_server()
+
+    resp = send_command("QHALT:;")
+    print(resp)
+
+    return 'Halting program'
+
 @app.route('/reload')
 def reload():
     shutdown_server()
@@ -78,8 +87,8 @@ def reload():
 
     return 'Reloading program'
 
-@app.route('/down')
-def shutdown():
+@app.route('/kill_server')
+def kill_server():
     shutdown_server()
     return 'Server shutting down'
 
