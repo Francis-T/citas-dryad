@@ -103,7 +103,17 @@ def send_command(cmd):
 
         s.sendall(cmd.encode('UTF-8'))
 
-        resp = s.recv(1024)
+        resp = ""
+        while True:
+            try:
+                data = s.recv(1024)
+            except Exception as e:
+                print("Exception occurred: {}".format(str(e)))
+                break
+
+            if not data: break
+            resp += str(data)
+
         s.shutdown(socket.SHUT_RDWR)
 
     return resp
