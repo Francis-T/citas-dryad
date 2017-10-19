@@ -69,16 +69,16 @@ for i in {0..1000};
 do
     echo "Script started."  >> $CACHE_NODE_SCRIPT_LOG;
 
-    WIFI_MODE=$(gpio read 4)
-    if [ $WIFI_MODE -eq 0 ];
+    # WIFI_MODE=$(gpio read 4)
+    # if [ $WIFI_MODE -eq 0 ];
+    # then
+    ACTIVE_SERVERS=$(ps u -C python3 | grep flask)
+    if [ "$ACTIVE_SERVERS" = "" ];
     then
-        ACTIVE_SERVERS=$(ps u -C python3 | grep flask)
-        if [ "$ACTIVE_SERVERS" = "" ];
-        then
-            export FLASK_APP=server.py
-            python3 -m flask run --host=0.0.0.0 &
-        fi;
+        export FLASK_APP=server.py
+        python3 -m flask run --host=0.0.0.0 &
     fi;
+    # fi;
 
     sudo /usr/bin/python3 main.py
     RES_CODE=$(echo $?)
