@@ -83,7 +83,6 @@
 #define VBATPIN A7
 
 /* Data variable definitions */
-#define USE_ARDUINO
 #define DEBUG_MODE
 
 #define OFFS_HEADER         0
@@ -399,9 +398,7 @@ int proc_hdlAsleep() {
   USBDevice.detach(); // Safely detach the USB prior to sleeping
   _radioRtc.standbyMode(); // Sleep until next alarm match
   USBDevice.attach(); // Re-attach the USB, audible sound on windows machines
-
-  // Blink(LED, 100, 6); // Blink 6 times with 100ms interval
-
+  
   /* Re-start the Serial again since we stopped it before detaching */
   Serial.begin(115200);
   Serial.println("After detach");
@@ -409,19 +406,17 @@ int proc_hdlAsleep() {
 
   /* Set the work done flag back to false */
   _workDone = false;
-
-  Serial.println("Before status packet sending");
-
-  if(comm_sendStatusPacket() == STATUS_OK){
-    Serial.println("Status Packet Sent!");
-  }
-
-  Serial.println("After status packet sending");
+  
   // Record when we last started idling again
   _lastIdleTime = millis();
 
   // Finally, set the state machine back to STATE_IDLE
   state_set(STATE_IDLE);
+
+  // Send status packet before Idling
+  if(comm_sendStatusPacket() == STATUS_OK){
+    Serial.println("Status Packet Sent!");
+  }
   return STATUS_OK;
 }
 
@@ -430,11 +425,23 @@ int proc_hdlAsleep() {
  * @return  an integer status
  */
 int proc_hdlCaching() {
+  /* Clear the buffer for receiving status data */
+  memset(&_tDecodedPacket, 0, sizeof(_tDecodedPacket));
+  memset(&_tStatusPayload, 0, sizeof(_tStatusPayload));
+  
   /* Listen to data broadcasts from sensor node senders for some time */
   Serial.println("Start listening...");
   while(millis() - _lastCacheTime <= CACHING_DURATION){
     if(radio_recv() == STATUS_OK) {
       Serial.println("Got a message.");
+      /* Parse the received packet */
+      comm_parseHeader(&_tDecodedPacket, _recvBuf, 9);
+      comm_parseStatusPayload(&_tStatusPayload,
+                              _tDecodedPacket.aPayload,
+                              _tDecodedPacket.uContentLen);
+
+      dbg_displayPacketHeader( &_tDecodedPacket );
+      
       break; // Break out of while loop once data is received
     }
     delay(200); // Sanity delay
@@ -511,7 +518,6 @@ int cfg_processSerialInput() {
   Serial.println(aBuf);
 
   if ( strncmp(aBuf, "END", 3) == 0) {
-    Serial.println("Accepted END");
     return STATUS_OK;
   } else if ( strncmp(aBuf, "SET NODE ADDR ", 14) == 0 ) {
     Serial.print("Node address set to ");
@@ -618,10 +624,7 @@ int radio_recv(){
       Serial.print("Got packet from #"); Serial.print(from);
       Serial.print(" [RSSI :");
       Serial.print(_rf69.lastRssi());
-      Serial.print("] : ");
-      Serial.println((char*)_recvBuf);
-      Blink(LED, 40, 3); //blink LED 3 times, 40ms between blinks
-
+      Serial.println("]");
       // Send a reply back to the originator client
       if (!_rf69_manager.sendtoWait(data, sizeof(data), from))
         Serial.println("Sending failed (no ack)");
@@ -694,15 +697,6 @@ float utl_measureBatt() {
 void utl_hdlRtcInterrupt() // Do something when interrupt called
 {
   
-}
-
-void Blink(byte PIN, byte DELAY_MS, byte loops) {
-  for (byte i=0; i<loops; i++)  {
-    digitalWrite(PIN,HIGH);
-    delay(DELAY_MS);
-    digitalWrite(PIN,LOW);
-    delay(DELAY_MS);
-  }
 }
 
 /***********************/
@@ -892,3 +886,18 @@ int comm_sendStatusPacket(){
 
   return STATUS_FAILED;
 }
+
+
+#ifdef DEBUG_MODE
+int dbg_displayPacketHeader( tPacket_t* pPacket )
+{
+    Serial.println("Header:");
+    Serial.print("    Type: "); Serial.println((uint8_t)pPacket->uContentType);
+    Serial.print("    Len: "); Serial.println((uint8_t)pPacket->uContentLen);
+    Serial.print("    MajVer: "); Serial.println((uint8_t)pPacket->uMajVer); 
+    Serial.print("    MinVer: "); Serial.println((uint8_t)pPacket->uMinVer);
+    Serial.print("    Timestamp: "); Serial.println((unsigned long)pPacket->uTimestamp);
+
+    return STATUS_OK;
+}
+#endif

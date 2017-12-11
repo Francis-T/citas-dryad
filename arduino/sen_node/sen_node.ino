@@ -13,6 +13,8 @@
 #define RF69_FREQ 434.0
 #define RF95_FREQ 434.0
 
+#define DEBUG_MODE
+
 // Define Feather and LoRa
 #define ARDUINO_SAMD_FEATHER_M0
 #define ADAFRUIT_LORA_9X
@@ -56,6 +58,8 @@
 #define TYPE_REQ_UNKNOWN    0
 #define TYPE_REQ_STATUS     1
 #define TYPE_REQ_DATA       2
+
+#define LISTENING_DURATION  10000 // 10s
 
 
 RH_RF69 _rf69(RFM69_CS, RFM69_INT);              
@@ -108,6 +112,13 @@ tDataHandler_t aDataHdlTbl[] = {
     { TYPE_REQ_DATA, comm_parseDataPayload }
 };
 
+tPacket_t   _tInputPacket;
+tPacket_t   _tDecodedPacket;
+tStatusPayload_t _tStatusPayload;
+tDataPayload_t _tDataPayload;
+
+
+long _lastListenTime = 0;
 
 int rtc_init();
 
@@ -116,6 +127,9 @@ int radio_send(char* buf);
 
 int lora_init(void);
 int lora_recv();
+
+int test_recv();
+int test_send(boolean stat, boolean data);
 
 uint8_t _buf[RH_RF69_MAX_MESSAGE_LEN];
 
@@ -142,92 +156,114 @@ void setup()
 }
 
 void loop() {
+//  test_send(true, false); // params: status, data
+  _lastListenTime = millis();
+  test_recv();
+}
 
-  uint8_t _buf[64];
-  uint8_t aRecvBuf[64];
+int test_send(boolean stat, boolean data){
   tPacket_t   tInputPacket;
   tPacket_t   tDecodedPacket;
   tStatusPayload_t tStatusPayload;
   tDataPayload_t tDataPayload;
 
-  /**************************************************/
-  /** Test creating and sending of a STATUS packet **/
-  /**************************************************/
-
-  /*  Clear all buffers  */
-  memset(_buf, '\0', sizeof(_buf)/sizeof(_buf[0]));
-  memset(&tInputPacket, 0, sizeof(tInputPacket));
-  memset(&tStatusPayload, 0, sizeof(tStatusPayload));
-
-  /* Create the packet header */
-  tInputPacket.uContentType = TYPE_REQ_UNKNOWN;
-  tInputPacket.uContentLen  = LEN_PAYLOAD_STATUS;
-  tInputPacket.uMajVer      = PROTO_MAJ_VER;
-  tInputPacket.uMinVer      = PROTO_MIN_VER;
-  tInputPacket.uTimestamp   = millis();
-
-  /* Create the status payload */
-  tStatusPayload.uNodeId          = 144;
-  tStatusPayload.uPower           = 0x03FF;
-  tStatusPayload.uDeploymentState = 1;
-  tStatusPayload.uStatusCode      = 0xFF;
-
-  /* Write status payload to the packet */
-  comm_createStatusPayload(tInputPacket.aPayload, &tStatusPayload);
-
-  /* Finally, write the packet to the sending buffer */
-  comm_writePacket(_buf, &tInputPacket);
-
-//  /* Send the packet */
-//  Serial.println("Sending status packet...");
-//  if(radio_send((char*)_buf) == STATUS_OK){
-//    Serial.println("Sending success.");
-//  }
-//  delay(100);  // Wait 1 second between transmits, could also 'sleep' here!
-//
-
-  /************************************************/
-  /** Test creating and sending of a DATA packet **/
-  /************************************************/
-
-  memset(_buf, '\0', sizeof(_buf)/sizeof(_buf[0]));
-  memset(&tDataPayload, 0, sizeof(tDataPayload));
-
-  /* Create the packet header */
-  tInputPacket.uContentType = TYPE_REQ_STATUS;
-  tInputPacket.uContentLen = LEN_PAYLOAD_DATA;
-  tInputPacket.uTimestamp   = millis();
-
-  /* Create the data payload */
-  tDataPayload.uNodeId = 144;
-  tDataPayload.uRelayId = 145;
-  tDataPayload.uPH            = 0x03FF;
-  tDataPayload.uConductivity  = 0x03FF;
-  tDataPayload.uLight         = 0x03FF;
-  tDataPayload.uTempAir       = 0x03FF;
-  tDataPayload.uTempSoil      = 0x03FF;
-  tDataPayload.uHumidity      = 0x03FF;
-  tDataPayload.uMoisture      = 0x03FF;
-  tDataPayload.uReserved      = 0x03FF;
-
-  /* Write data payload to the packet */
-  comm_createDataPayload(tInputPacket.aPayload, &tDataPayload);
-
-  /* Finally, write the packet to the sending buffer */
-  comm_writePacket(_buf, &tInputPacket);
-
-//  /* Send the packet */
-//  Serial.println("Sending Data Packet...");
-//  if(radio_send((char*)_buf) == STATUS_OK){
-//    Serial.println("Sending success.");
-//  }
-//
-//  delay(100);  // Wait 1 second between transmits, could also 'sleep' here!
-
-  char radiopacket[20] = "Hello World #      ";
-  if(radio_send((char*)_buf) == STATUS_OK){
-    Serial.println("Sending success.");
+  if(stat == true){
+    /**************************************************/
+    /** Test creating and sending of a STATUS packet **/
+    /**************************************************/
+    /*  Clear all buffers  */
+    memset(_buf, '\0', sizeof(_buf)/sizeof(_buf[0]));
+    memset(&tInputPacket, 0, sizeof(tInputPacket));
+    memset(&tStatusPayload, 0, sizeof(tStatusPayload));
+  
+    /* Create the packet header */
+    tInputPacket.uContentType = TYPE_REQ_UNKNOWN;
+    tInputPacket.uContentLen  = LEN_PAYLOAD_STATUS;
+    tInputPacket.uMajVer      = PROTO_MAJ_VER;
+    tInputPacket.uMinVer      = PROTO_MIN_VER;
+    tInputPacket.uTimestamp   = millis();
+  
+    /* Create the status payload */
+    tStatusPayload.uNodeId          = 144;
+    tStatusPayload.uPower           = 0x03FF;
+    tStatusPayload.uDeploymentState = 1;
+    tStatusPayload.uStatusCode      = 0xFF;
+  
+    /* Write status payload to the packet */
+    comm_createStatusPayload(tInputPacket.aPayload, &tStatusPayload);
+  
+    /* Finally, write the packet to the sending buffer */
+    comm_writePacket(_buf, &tInputPacket);
+  
+    /* Send the packet */
+    Serial.println("Sending status packet...");
+    if(radio_send((char*)_buf) == STATUS_OK){
+      Serial.println("Sending success.");
+    }
   }
+  
+  if(data==true){
+    /************************************************/
+    /** Test creating and sending of a DATA packet **/
+    /************************************************/
+  
+    memset(_buf, '\0', sizeof(_buf)/sizeof(_buf[0]));
+    memset(&tDataPayload, 0, sizeof(tDataPayload));
+    memset(&tInputPacket, 0, sizeof(tInputPacket));
+  
+    /* Create the packet header */
+    tInputPacket.uContentType = TYPE_REQ_STATUS;
+    tInputPacket.uContentLen = LEN_PAYLOAD_DATA;
+    tInputPacket.uTimestamp   = millis();
+  
+    /* Create the data payload */
+    tDataPayload.uNodeId = 144;
+    tDataPayload.uRelayId = 145;
+    tDataPayload.uPH            = 0x03FF;
+    tDataPayload.uConductivity  = 0x03FF;
+    tDataPayload.uLight         = 0x03FF;
+    tDataPayload.uTempAir       = 0x03FF;
+    tDataPayload.uTempSoil      = 0x03FF;
+    tDataPayload.uHumidity      = 0x03FF;
+    tDataPayload.uMoisture      = 0x03FF;
+    tDataPayload.uReserved      = 0x03FF;
+  
+    /* Write data payload to the packet */
+    comm_createDataPayload(tInputPacket.aPayload, &tDataPayload);
+  
+    /* Finally, write the packet to the sending buffer */
+    comm_writePacket(_buf, &tInputPacket);
+  
+    /* Send the packet */
+    Serial.println("Sending Data Packet...");
+    if(radio_send((char*)_buf) == STATUS_OK){
+      Serial.println("Sending success.");
+    }
+  }
+
+  delay(100);  // Wait 1 second between transmits, could also 'sleep' here!
+  return STATUS_OK;
+}
+
+int test_recv(){
+  /* Clear the buffer for receiving status data */
+  memset(&_tDecodedPacket, 0, sizeof(_tDecodedPacket));
+  memset(&_tStatusPayload, 0, sizeof(_tStatusPayload));
+  Serial.println("Listening for data...");
+
+  while(millis() - _lastListenTime <= LISTENING_DURATION){
+    if(lora_recv() == STATUS_OK){
+      /* Parse the received packet */
+      comm_parseHeader(&_tDecodedPacket, _buf, 9);
+      comm_parseStatusPayload(&_tStatusPayload,
+                              _tDecodedPacket.aPayload,
+                              _tDecodedPacket.uContentLen);
+
+      dbg_displayPacketHeader( &_tDecodedPacket );
+      return STATUS_OK;
+    }
+  }
+  return STATUS_FAILED;
 }
 
 
@@ -330,7 +366,23 @@ int lora_init(){
 }
 
 int lora_recv(){
-  return STATUS_OK;
+  if(_rf95.available()){ // When data is recvd
+    // Clear buffer
+    memset(_buf, '\0', sizeof(_buf)/sizeof(_buf[0]));
+    uint8_t len = sizeof(_buf);
+
+    if (_rf95.recv(_buf, &len)) {
+      Serial.print("RSSI: ");
+      Serial.println(_rf95.lastRssi(), DEC);
+      return STATUS_OK;
+    }
+    else
+    {
+      Serial.println("Receive failed");
+      
+    }
+  }
+  return STATUS_FAILED;
 }
 
 /***********************/
@@ -479,3 +531,17 @@ int comm_parseStatusPayload( void* pPayload, uint8_t* pRecvBuf, uint16_t uRecvLe
 
   return STATUS_OK;
 }
+
+#ifdef DEBUG_MODE
+int dbg_displayPacketHeader( tPacket_t* pPacket )
+{
+    Serial.println("Header:");
+    Serial.print("    Type: "); Serial.println((uint8_t)pPacket->uContentType);
+    Serial.print("    Len: "); Serial.println((uint8_t)pPacket->uContentLen);
+    Serial.print("    MajVer: "); Serial.println((uint8_t)pPacket->uMajVer); 
+    Serial.print("    MinVer: "); Serial.println((uint8_t)pPacket->uMinVer);
+    Serial.print("    Timestamp: "); Serial.println((unsigned long)pPacket->uTimestamp);
+
+    return STATUS_OK;
+}
+#endif
