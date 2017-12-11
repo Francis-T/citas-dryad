@@ -1,6 +1,14 @@
 /**
  * Relay Node Program
  * CITAS Dryad 2017
+ * 
+ * Dependencies
+ *  Libraries
+ *    - DS3231 by Adafruit
+ *    - RTCLib by Arduino 
+ *  Boards
+ *    - Arduino SAMD
+ *    - Adafruit SAMD
 */
 
 /***********************/
@@ -39,8 +47,7 @@
 #define MY_ADDRESS     90
 
 // Destination addresses
-#define NODE_ID   4
-#define NODE_DEST 88               
+#define DEST_ADDRESS   88               
 
 // Pin definitions for Feather and LoRa
 #if defined(ARDUINO_SAMD_FEATHER_M0) // Feather M0 w/Radio
@@ -63,7 +70,7 @@
 
 // Duration and Timeout in Milliseconds
 #define IDLE_TIMEOUT      30000
-#define CACHING_DURATION  60000
+#define CACHING_DURATION  120000
 #define TXING_DURATION    30000
 #define SLEEP_TIME        15000
 
@@ -246,6 +253,10 @@ void setup() {
   // Call initialization for radio and lora
   radio_init();
   lora_init();
+
+  // Display addresses
+  Serial.print("Self address @"); Serial.println(MY_ADDRESS);
+  Serial.print("Dest address @"); Serial.println(DEST_ADDRESS);
   
   return;
 }
@@ -334,8 +345,6 @@ int proc_hdlUndeployed() {
         delay(10);
 //  }
 
-  Serial.println("Bef Idle");
-
   state_set(STATE_IDLE);
   return STATUS_OK;
 }
@@ -352,7 +361,8 @@ int proc_hdlUndeployed() {
  * @return  an integer status
  */
 int proc_hdlIdle() {
-//  digitalWrite(LED, HIGH);
+  
+  digitalWrite(LED, HIGH); // Turn LED on to specify the board is awake
   if ((millis() - _lastIdleTime) > IDLE_TIMEOUT) {
     /* If the time since the device last started idling exceeds the IDLE_TIMEOUT,
      *  then it is time to put the device back to the ASLEEP state for a bit */
@@ -382,7 +392,8 @@ int proc_hdlAsleep() {
   _radioRtc.enableAlarm(_radioRtc.MATCH_SS);            // Match seconds only
   _radioRtc.attachInterrupt(utl_hdlRtcInterrupt); // Attaches function to be called, currently blank
   delay(50); // Brief delay prior to sleeping not really sure its required
-//  digitalWrite(LED, LOW);
+  
+  digitalWrite(LED, LOW); // Turn LED off to specify board is asleep
   
   Serial.end();
   USBDevice.detach(); // Safely detach the USB prior to sleeping
@@ -420,19 +431,15 @@ int proc_hdlAsleep() {
  */
 int proc_hdlCaching() {
   /* Listen to data broadcasts from sensor node senders for some time */
-  int count = 0;
-  Serial.println("Listening to data broadcasts from sensor nodes");
+  Serial.println("Start listening...");
   while(millis() - _lastCacheTime <= CACHING_DURATION){
-    Serial.println((char*)count++);
     if(radio_recv() == STATUS_OK) {
-      Serial.println("Got a message");
-      // Break out of while loop once data is received
-      // TODO To be changed according to protocol?
-      break;
+      Serial.println("Got a message.");
+      break; // Break out of while loop once data is received
     }
+    delay(200); // Sanity delay
   }
-  // TODO save to EEPROM
-
+  
   /* Record time before txing */
   _lastTxingTime = millis();
   
@@ -460,7 +467,7 @@ int proc_hdlTxing() {
   
   while(millis() - _lastTxingTime <= TXING_DURATION){
     if(lora_send((char*)_sendBuf, sizeof(_sendBuf)) == STATUS_OK){
-      // Break once the data has been sent
+      Serial.println("Message sent!");
       break;
     }
   }
@@ -595,26 +602,29 @@ int radio_init() {
                     0x01, 0x02, 0x03, 0x04, 0x05, 0x06, 0x07, 0x08};
   _rf69.setEncryptionKey(key);
   Serial.print("RFM69 radio @");  Serial.print((int)RF69_FREQ);  Serial.println(" MHz");
-
   return STATUS_OK;
 }
 
 
 int radio_recv(){
+  uint8_t data[] = "And hello back to you";
   if (_rf69_manager.available()) {
     // Wait for a message addressed to us from the client
     uint8_t len = sizeof(_recvBuf);
     uint8_t from;
     if (_rf69_manager.recvfromAck(_recvBuf, &len, &from)) {
-      // Clear data buffer
-      memset(_recvBuf, '\0', sizeof(_recvBuf)/sizeof(_recvBuf[0]));
+      _recvBuf[len] = 0;
       
       Serial.print("Got packet from #"); Serial.print(from);
       Serial.print(" [RSSI :");
       Serial.print(_rf69.lastRssi());
       Serial.print("] : ");
       Serial.println((char*)_recvBuf);
-      // Blink(LED, 40, 3); //blink LED 3 times, 40ms between blinks
+      Blink(LED, 40, 3); //blink LED 3 times, 40ms between blinks
+
+      // Send a reply back to the originator client
+      if (!_rf69_manager.sendtoWait(data, sizeof(data), from))
+        Serial.println("Sending failed (no ack)");
 
       return STATUS_OK;
     }
@@ -645,7 +655,7 @@ int lora_init(){
     Serial.println("setFrequency failed");
     while (1);
   }
-  Serial.print("Set Freq to: "); Serial.println(RF95_FREQ);
+  Serial.print("RM95 radio @"); Serial.println(RF95_FREQ);
   
   // Defaults after init are 434.0MHz, 13dBm, Bw = 125 kHz, Cr = 4/5, Sf = 128chips/symbol, CRC on
  

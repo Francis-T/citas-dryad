@@ -17,10 +17,11 @@
 #define ARDUINO_SAMD_FEATHER_M0
 #define ADAFRUIT_LORA_9X
 
-// Where to send packets to!
-#define DEST_ADDRESS   90
 // change addresses for each client board, any number :)
 #define MY_ADDRESS     88
+
+// Where to send packets to!
+#define DEST_ADDRESS   90
 
 #if defined(ARDUINO_SAMD_FEATHER_M0) // Feather M0 w/Radio
   #define RFM69_CS      8
@@ -111,7 +112,7 @@ tDataHandler_t aDataHdlTbl[] = {
 int rtc_init();
 
 int radio_init(void);
-int radio_send(char* buf, int len);
+int radio_send(char* buf);
 
 int lora_init(void);
 int lora_recv();
@@ -177,13 +178,13 @@ void loop() {
   /* Finally, write the packet to the sending buffer */
   comm_writePacket(_buf, &tInputPacket);
 
-  /* Send the packet */
-  Serial.println("Sending status packet...");
-  if(radio_send((char*)_buf, sizeof(_buf)) == STATUS_OK){
-    Serial.println("Sending success.");
-  }
-  delay(1000);  // Wait 1 second between transmits, could also 'sleep' here!
-
+//  /* Send the packet */
+//  Serial.println("Sending status packet...");
+//  if(radio_send((char*)_buf) == STATUS_OK){
+//    Serial.println("Sending success.");
+//  }
+//  delay(100);  // Wait 1 second between transmits, could also 'sleep' here!
+//
 
   /************************************************/
   /** Test creating and sending of a DATA packet **/
@@ -215,14 +216,18 @@ void loop() {
   /* Finally, write the packet to the sending buffer */
   comm_writePacket(_buf, &tInputPacket);
 
-  /* Send the packet */
-  Serial.println("Sending Data Packet...");
-  if(radio_send((char*)_buf, sizeof(_buf)) == STATUS_OK){
+//  /* Send the packet */
+//  Serial.println("Sending Data Packet...");
+//  if(radio_send((char*)_buf) == STATUS_OK){
+//    Serial.println("Sending success.");
+//  }
+//
+//  delay(100);  // Wait 1 second between transmits, could also 'sleep' here!
+
+  char radiopacket[20] = "Hello World #      ";
+  if(radio_send((char*)_buf) == STATUS_OK){
     Serial.println("Sending success.");
   }
-
-  delay(500);  // Wait 1 second between transmits, could also 'sleep' here!
-
 }
 
 
@@ -266,9 +271,9 @@ int radio_init() {
   return STATUS_OK;
 }
 
-int radio_send(char* buf, int len){
+int radio_send(char* radiopacket){
   // Send a message to the DESTINATION!
-  if (_rf69_manager.sendtoWait((uint8_t *)_buf, len, DEST_ADDRESS)) {
+  if (_rf69_manager.sendtoWait((uint8_t *)radiopacket, strlen(radiopacket), DEST_ADDRESS)) {
     // Now wait for a reply from the server
     uint8_t len = sizeof(_buf);
     uint8_t from;   
@@ -279,7 +284,7 @@ int radio_send(char* buf, int len){
       Serial.print(" [RSSI :");
       Serial.print(_rf69.lastRssi());
       Serial.print("] : ");
-      Serial.println((char*)buf);
+      Serial.println((char*)_buf);
     } else {
       Serial.println("No reply, is anyone listening?");
     }
