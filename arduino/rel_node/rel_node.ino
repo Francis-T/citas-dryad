@@ -69,10 +69,10 @@
 #define STATUS_CONTINUE   2
 
 // Duration and Timeout in Milliseconds
-#define IDLE_TIMEOUT      30000
-#define CACHING_DURATION  120000
-#define TXING_DURATION    30000
-#define SLEEP_TIME        15000
+#define IDLE_TIMEOUT      15000
+#define LISTEN_DURATION   10000
+#define TRANSMIT_DURATION 10000
+#define SLEEP_TIME        10000
 
 /** Note: SLEEP_TIME_SECS is separated here because
  *        the RTC wakeup alarm / timer needs it to
@@ -109,8 +109,8 @@ typedef enum {
   STATE_UNDEPLOYED,
   STATE_IDLE,
   STATE_ASLEEP,
-  STATE_CACHING,
-  STATE_TXING,
+  STATE_LISTEN,
+  STATE_TRANSMIT,
 } eState_t;
 
 // Struct definitions 
@@ -129,8 +129,8 @@ char _stateStr[][12] = {
   "UNDEPLOYED",
   "IDLE",
   "ASLEEP",
-  "CACHING",
-  "TXING",
+  "LISTEN",
+  "TRANSMIT",
 };
 
 typedef struct {
@@ -177,8 +177,8 @@ int proc_hdlInactive();
 int proc_hdlUndeployed();
 int proc_hdlIdle();
 int proc_hdlAsleep();
-int proc_hdlCaching();
-int proc_hdlTxing();
+int proc_hdlListen();
+int proc_hdlTransmit();
 int cfg_processSerialInput();
 
 int comm_sendStatusPacket();
@@ -212,12 +212,14 @@ int _iPacketNum = 0;
 float _fBatt = 0.0;
 
 long _lastIdleTime = 0;
-long _lastCacheTime = 0;
-long _lastTxingTime = 0;
+long _lastListenTime = 0;
+long _lastTransmitTime = 0;
 bool _workDone = false;   /* This flag could be for data collection, retransmission, etc. */
 
 uint8_t _recvBuf[RH_RF69_MAX_MESSAGE_LEN];
 uint8_t _sendBuf[RH_RF69_MAX_MESSAGE_LEN];
+
+bool _isDataAvailable = false; // This flag will be used as a condition for transmitting
 
 tPacket_t   _tInputPacket;
 tPacket_t   _tDecodedPacket;
@@ -290,12 +292,12 @@ void loop() {
       iRet = proc_hdlAsleep();
       break;
       
-    case STATE_CACHING:
-      iRet = proc_hdlCaching();
+    case STATE_LISTEN:
+      iRet = proc_hdlListen();
       break;
 
-    case STATE_TXING:
-      iRet = proc_hdlTxing();
+    case STATE_TRANSMIT:
+      iRet = proc_hdlTransmit();
       break;
       
     default:
@@ -341,10 +343,12 @@ int proc_hdlUndeployed() {
    *  already been deployed before anyway */
 //  if (digitalRead(IS_DEPLOYED_SW) == LOW) {
       while (cfg_processSerialInput() == STATUS_CONTINUE);
+        Serial.println("Starting processes...");
         delay(10);
 //  }
-
+  _lastIdleTime = millis();
   state_set(STATE_IDLE);
+  
   return STATUS_OK;
 }
 
@@ -352,7 +356,7 @@ int proc_hdlUndeployed() {
  * @desc    Handler for the STATE_IDLE. A state that simply waits for events to be done.
  * 
  *          If the device enters this state while the 'work' is not yet done (as indicated 
- *          by the _workDone flag), then it immediately transitions to STATE_CACHING instead.
+ *          by the _workDone flag), then it immediately transitions to STATE_LISTEN instead.
  *          
  *          On the other hand, if we enter this state and we've run out of time (IDLE_TIMEOUT),
  *          then we simply move on to STATE_ASLEEP instead.
@@ -368,9 +372,9 @@ int proc_hdlIdle() {
     state_set(STATE_ASLEEP);
     
   } else if (_workDone == false) {
-    /* Record time before caching */
-    _lastCacheTime = millis();
-    state_set(STATE_CACHING);
+    /* Record time before LISTEN */
+    _lastListenTime = millis();
+    state_set(STATE_LISTEN);
     _workDone = true;
     
   }
@@ -389,7 +393,7 @@ int proc_hdlAsleep() {
   int iWakeupTime = (_radioRtc.getSeconds() + SLEEP_TIME_SECS) % 60;
   _radioRtc.setAlarmSeconds(iWakeupTime);         // RTC time to wake, currently seconds only
   _radioRtc.enableAlarm(_radioRtc.MATCH_SS);            // Match seconds only
-  _radioRtc.attachInterrupt(utl_hdlRtcInterrupt); // Attaches function to be called, currently blank
+  _radioRtc.attachInterrupt(utl_hdlInterrupt); // Attaches function to be called, currently blank
   delay(50); // Brief delay prior to sleeping not really sure its required
   
   digitalWrite(LED, LOW); // Turn LED off to specify board is asleep
@@ -407,12 +411,11 @@ int proc_hdlAsleep() {
   /* Set the work done flag back to false */
   _workDone = false;
   
-  // Record when we last started idling again
-  _lastIdleTime = millis();
-
   // Finally, set the state machine back to STATE_IDLE
+  _lastIdleTime = millis();
   state_set(STATE_IDLE);
 
+  Serial.println("Send status packet called!");
   // Send status packet before Idling
   if(comm_sendStatusPacket() == STATUS_OK){
     Serial.println("Status Packet Sent!");
@@ -421,17 +424,19 @@ int proc_hdlAsleep() {
 }
 
 /**
- * @desc    Handler for the STATE_CACHING device state. 
+ * @desc    Handler for the STATE_LISTEN device state. 
  * @return  an integer status
  */
-int proc_hdlCaching() {
+int proc_hdlListen() {
   /* Clear the buffer for receiving status data */
   memset(&_tDecodedPacket, 0, sizeof(_tDecodedPacket));
   memset(&_tStatusPayload, 0, sizeof(_tStatusPayload));
   
-  /* Listen to data broadcasts from sensor node senders for some time */
+  // Listen to data broadcasts from sensor node senders for some time
   Serial.println("Start listening...");
-  while(millis() - _lastCacheTime <= CACHING_DURATION){
+  
+  _isDataAvailable = false;
+  while(millis() - _lastListenTime <= LISTEN_DURATION){
     if(radio_recv() == STATUS_OK) {
       Serial.println("Got a message.");
       /* Parse the received packet */
@@ -441,46 +446,52 @@ int proc_hdlCaching() {
                               _tDecodedPacket.uContentLen);
 
       dbg_displayPacketHeader( &_tDecodedPacket );
+      _isDataAvailable = true;
       
       break; // Break out of while loop once data is received
     }
     delay(200); // Sanity delay
   }
   
-  /* Record time before txing */
-  _lastTxingTime = millis();
+  /* Record time before Transmitting*/
+  _lastTransmitTime = millis();
   
-  /* Set the state machine to STATE_Txing */
-  state_set(STATE_TXING);
+  /* Set the state machine to STATE_TRANSMIT */
+  state_set(STATE_TRANSMIT);
   return STATUS_OK;
 }
 
 /**
- * @desc    Handler for the STATE_TXING device state.
+ * @desc    Handler for the STATE_ device state.
  * @return  an integer status
  */
-int proc_hdlTxing() {
+int proc_hdlTransmit() {
   /* Transmit cached data to destination node */
   // TODO Go through and empty out cached data
 
-  // Clear the buffer for receiving status data
-  memset(&_tDecodedPacket, 0, sizeof(_tDecodedPacket));
-  memset(&_sendBuf, '\0', sizeof(_sendBuf)/sizeof(_sendBuf[0]));
-
-  // Parse and encode timestamp to the received packet 
-  comm_parseHeader(&_tDecodedPacket, _recvBuf, 9);
-  _tDecodedPacket.uTimestamp = _now.unixtime();
-  comm_writePacket(_sendBuf, &_tDecodedPacket);
+  // Transmit only when there is data to transmit
+  if(_isDataAvailable == true){
+    // Clear the buffer for receiving status data
+    memset(&_tDecodedPacket, 0, sizeof(_tDecodedPacket));
+    memset(&_sendBuf, '\0', sizeof(_sendBuf)/sizeof(_sendBuf[0]));
   
-  while(millis() - _lastTxingTime <= TXING_DURATION){
-    if(lora_send((char*)_sendBuf, sizeof(_sendBuf)) == STATUS_OK){
-      Serial.println("Message sent!");
-      break;
+    // Parse and encode timestamp to the received packet 
+    comm_parseHeader(&_tDecodedPacket, _recvBuf, 9);
+    _tDecodedPacket.uTimestamp = _now.unixtime();
+    comm_writePacket(_sendBuf, &_tDecodedPacket);
+  
+    while(millis() - _lastTransmitTime <= TRANSMIT_DURATION){
+      if(lora_send((char*)_sendBuf, sizeof(_sendBuf)) == STATUS_OK){
+        // TODO add number of sending trials?
+        break;
+      }
     }
   }
 
   /* Finally, set the state machine back to STATE_IDLE */
+  _lastIdleTime = millis();
   state_set(STATE_IDLE);
+  
   return STATUS_OK;
 }
 
@@ -560,6 +571,10 @@ eState_t state_get() {
 /******************************/
 /**   RTC Functions          **/
 /******************************/
+/**
+* @desc    Initializes both built-in and DS3231 RTCs
+* @return  void
+*/
 void rtc_init() {
     /* Start the built-in RTC */
   _rtc.begin();
@@ -575,7 +590,10 @@ void rtc_init() {
 /******************************/
 /**   Radio Functions        **/
 /******************************/
- 
+/**
+* @desc    Initializes radio
+* @return  an integer status
+*/
 int radio_init() {
   Serial.println("Feather Radio Initialization...");
   
@@ -611,7 +629,10 @@ int radio_init() {
   return STATUS_OK;
 }
 
-
+/**
+ * @desc    Radio receive
+ * @return  an integer status
+ */
 int radio_recv(){
   uint8_t data[] = "And hello back to you";
   if (_rf69_manager.available()) {
@@ -638,6 +659,10 @@ int radio_recv(){
 /***********************/
 /**   LoRa Functions  **/
 /***********************/
+/**
+* @desc    Initialize LoRa
+* @return  an integer status
+*/
 int lora_init(){
   Serial.println("Arduino LoRa Initialization...");
   
@@ -670,11 +695,14 @@ int lora_init(){
   return STATUS_OK;
 }
 
+/**
+* @desc    LoRa Send
+* @return  an integer status
+*/
 int lora_send(char* buf, int len){
-  Serial.println("Sending message.."); delay(10);
+  Serial.println("Start sending.."); delay(10);
   _rf95.send((uint8_t *)buf, len);
-  
-  Serial.println("Waiting for packet to complete..."); delay(10);
+  delay(10);
   _rf95.waitPacketSent();
 
   return STATUS_OK;
@@ -694,9 +722,8 @@ float utl_measureBatt() {
   return batt;
 }
 
-void utl_hdlRtcInterrupt() // Do something when interrupt called
-{
-  
+void utl_hdlInterrupt(){
+
 }
 
 /***********************/
@@ -900,4 +927,33 @@ int dbg_displayPacketHeader( tPacket_t* pPacket )
 
     return STATUS_OK;
 }
+int dbg_displayDataPayload( tDataPayload_t* pPayload )
+{
+    Serial.print("Payload (Data):");
+    Serial.print("    Source Node Id: "); Serial.println((uint16_t)pPayload->uNodeId);
+    Serial.print("    Dest Node Id: "); Serial.println((uint16_t)pPayload->uRelayId);
+    Serial.print("    pH: "); Serial.println((uint16_t)pPayload->uPH);
+    Serial.print("    Conductivity: "); Serial.println((uint16_t)pPayload->uConductivity);
+    Serial.print("    Light: "); Serial.println((uint16_t)pPayload->uLight);
+    Serial.print("    Temp (Air): "); Serial.println((uint16_t)pPayload->uTempAir);
+    Serial.print("    Humidity: "); Serial.println((uint16_t)pPayload->uHumidity);
+    Serial.print("    Temp (Soil): "); Serial.println((uint16_t)pPayload->uTempSoil);
+    Serial.print("    Moisture: "); Serial.println((uint16_t)pPayload->uMoisture);
+    Serial.print("    Reserved: "); Serial.println((uint16_t)pPayload->uReserved);
+
+    return STATUS_OK;
+}
+
+int dbg_displayStatusPayload( tStatusPayload_t* pPayload )
+{
+    Serial.print("Payload (Status):");
+    Serial.print("    Source Node Id: "); Serial.println((uint16_t)pPayload->uNodeId);
+    Serial.print("    Power: "); Serial.println((uint16_t)pPayload->uPower);
+    Serial.print("    Deployment State: "); Serial.println((uint8_t)pPayload->uDeploymentState);
+    Serial.print("    Status Cod`e: "); Serial.println((uint8_t)pPayload->uStatusCode);
+
+    return STATUS_OK;
+}
+
 #endif
+
