@@ -4,13 +4,12 @@
  * 
  * Dependencies
  *  Libraries
- *    - DS3231 by Adafruit
- *    - RTCLib by Arduino 
+ *    - RTCLib by Adafruit 
+ *    - RadioHead
  *  Boards
  *    - Arduino SAMD
  *    - Adafruit SAMD
 */
-
 /***********************/
 /*      libraries      */
 /***********************/
@@ -262,7 +261,6 @@ void setup() {
   return;
 }
 
-
 /**
  * @desc    Main looping function. This also contains the switch statement which launches
  *          different functions depending on the current device state.
@@ -430,6 +428,7 @@ int proc_hdlAsleep() {
 int proc_hdlListen() {
   /* Clear the buffer for receiving status data */
   memset(&_tDecodedPacket, 0, sizeof(_tDecodedPacket));
+  memset(&_tDataPayload, 0, sizeof(_tDataPayload));
   memset(&_tStatusPayload, 0, sizeof(_tStatusPayload));
   
   // Listen to data broadcasts from sensor node senders for some time
@@ -440,12 +439,27 @@ int proc_hdlListen() {
     if(radio_recv() == STATUS_OK) {
       Serial.println("Got a message.");
       /* Parse the received packet */
-      comm_parseHeader(&_tDecodedPacket, _recvBuf, 9);
-      comm_parseStatusPayload(&_tStatusPayload,
-                              _tDecodedPacket.aPayload,
-                              _tDecodedPacket.uContentLen);
+      for (int i = 0; i < RH_RF69_MAX_MESSAGE_LEN; i++) {
+        Serial.print(_recvBuf[i]);
+        Serial.print(" ");
+      }
+      Serial.println();
+
+      // Data payload
+      comm_parseHeader(&_tDecodedPacket, _recvBuf, 17);
+      comm_parseDataPayload(&_tDataPayload, 
+                            _tDecodedPacket.aPayload,
+                            _tDecodedPacket.uContentLen);
+
+      for(int i=0; i<_tDecodedPacket.uContentLen; i++){
+        Serial.print(_tDecodedPacket.aPayload[i]); 
+      }
+      Serial.println();
 
       dbg_displayPacketHeader( &_tDecodedPacket );
+      dbg_displayDataPayload( &_tDataPayload );
+
+      
       _isDataAvailable = true;
       
       break; // Break out of while loop once data is received
@@ -476,7 +490,7 @@ int proc_hdlTransmit() {
     memset(&_sendBuf, '\0', sizeof(_sendBuf)/sizeof(_sendBuf[0]));
   
     // Parse and encode timestamp to the received packet 
-    comm_parseHeader(&_tDecodedPacket, _recvBuf, 9);
+    comm_parseHeader(&_tDecodedPacket, _recvBuf, 17);
     _tDecodedPacket.uTimestamp = _now.unixtime();
     comm_writePacket(_sendBuf, &_tDecodedPacket);
   
@@ -634,11 +648,12 @@ int radio_init() {
  * @return  an integer status
  */
 int radio_recv(){
-  uint8_t data[] = "And hello back to you";
+  Serial.println();
   if (_rf69_manager.available()) {
     // Wait for a message addressed to us from the client
     uint8_t len = sizeof(_recvBuf);
     uint8_t from;
+
     if (_rf69_manager.recvfromAck(_recvBuf, &len, &from)) {
       _recvBuf[len] = 0;
       
@@ -646,9 +661,12 @@ int radio_recv(){
       Serial.print(" [RSSI :");
       Serial.print(_rf69.lastRssi());
       Serial.println("]");
-      // Send a reply back to the originator client
-      if (!_rf69_manager.sendtoWait(data, sizeof(data), from))
-        Serial.println("Sending failed (no ack)");
+      
+      for (int i = 0; i < RH_RF69_MAX_MESSAGE_LEN; i++) {
+        Serial.print(_recvBuf[i]);
+        Serial.print(" ");
+      }
+      Serial.println();
 
       return STATUS_OK;
     }
@@ -929,7 +947,7 @@ int dbg_displayPacketHeader( tPacket_t* pPacket )
 }
 int dbg_displayDataPayload( tDataPayload_t* pPayload )
 {
-    Serial.print("Payload (Data):");
+    Serial.println("Payload (Data):");
     Serial.print("    Source Node Id: "); Serial.println((uint16_t)pPayload->uNodeId);
     Serial.print("    Dest Node Id: "); Serial.println((uint16_t)pPayload->uRelayId);
     Serial.print("    pH: "); Serial.println((uint16_t)pPayload->uPH);
