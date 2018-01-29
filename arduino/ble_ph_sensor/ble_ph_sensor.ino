@@ -63,6 +63,14 @@ void setup() {
 void loop() {
   if (_bFirstActivate) {
     digitalWrite(DEPLOY_STATUS_PIN, HIGH);
+    delay(250);
+    digitalWrite(DEPLOY_STATUS_PIN, LOW);
+    delay(250);
+    digitalWrite(DEPLOY_STATUS_PIN, HIGH);
+    delay(250);
+    digitalWrite(DEPLOY_STATUS_PIN, LOW);
+    delay(250);
+    digitalWrite(DEPLOY_STATUS_PIN, HIGH);
     delay(50);
     digitalWrite(DEPLOY_STATUS_PIN, LOW);
     delay(50);
