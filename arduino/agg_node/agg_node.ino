@@ -969,7 +969,7 @@ int dbg_displayDataPayload( tDataPayload_t* pPayload )
     Serial.print(" 'Source Node Id' : "); Serial.print((uint16_t)pPayload->uNodeId);Serial.print(",");
     Serial.print(" 'Dest Node Id' : "); Serial.print((uint16_t)pPayload->uRelayId);Serial.print(",");
     Serial.print(" 'pH' : "); Serial.print((uint16_t)pPayload->uPH);Serial.print(",");
-    Serial.print(" 'Conductivity' : "); Serial.println((uint16_t)pPayload->uConductivity);Serial.print(",");
+    Serial.print(" 'Conductivity' : "); Serial.print((uint16_t)pPayload->uConductivity);Serial.print(",");
     Serial.print(" 'Light' : "); Serial.print((uint16_t)pPayload->uLight);Serial.print(",");
     Serial.print(" 'Temp (Air)' : "); Serial.print((uint16_t)pPayload->uTempAir);Serial.print(",");
     Serial.print(" 'Humidity' : "); Serial.print((uint16_t)pPayload->uHumidity);Serial.print(",");
@@ -994,6 +994,7 @@ int dbg_displayStatusPayload( tStatusPayload_t* pPayload )
 }
 
 #endif
+
 
 
 
