@@ -6,6 +6,7 @@
  *  Libraries
  *    - RTCLib by Adafruit 
  *    - RadioHead
+ *    - RTCZero
  *  Boards
  *    - Arduino SAMD
  *    - Adafruit SAMD
@@ -30,6 +31,17 @@
 #include <RHMesh.h>
 #include <RHReliableDatagram.h>
 
+#define DEBUG_MSGS_ON
+#if defined(DEBUG_MSGS_ON)
+#define DBG_PRINT(x)    Serial.print(x)
+#define DBG_PRINTLN(x)  Serial.println(x)
+
+#else
+#define DBG_PRINT(x)    NULL;
+#define DBG_PRINTLN(x)  NULL;
+
+#endif
+
 
 /***********************/
 /*    Var definitions  */
@@ -46,7 +58,7 @@
 #define MY_ADDRESS     90
 
 // Destination addresses
-#define DEST_ADDRESS   88               
+#define DEST_ADDRESS   92               
 
 // Pin definitions for Feather and LoRa
 #if defined(ARDUINO_SAMD_FEATHER_M0) // Feather M0 w/Radio
@@ -255,8 +267,8 @@ void setup() {
   lora_init();
 
   // Display addresses
-  Serial.print("Self address @"); Serial.println(MY_ADDRESS);
-  Serial.print("Dest address @"); Serial.println(DEST_ADDRESS);
+  DBG_PRINT("Self address @"); DBG_PRINTLN(MY_ADDRESS);
+  DBG_PRINT("Dest address @"); DBG_PRINTLN(DEST_ADDRESS);
   
   return;
 }
@@ -341,7 +353,7 @@ int proc_hdlUndeployed() {
    *  already been deployed before anyway */
 //  if (digitalRead(IS_DEPLOYED_SW) == LOW) {
       while (cfg_processSerialInput() == STATUS_CONTINUE);
-        Serial.println("Starting processes...");
+        DBG_PRINTLN("Starting processes...");
         delay(10);
 //  }
   _lastIdleTime = millis();
@@ -403,7 +415,7 @@ int proc_hdlAsleep() {
   
   /* Re-start the Serial again since we stopped it before detaching */
   Serial.begin(115200);
-  Serial.println("After detach");
+  DBG_PRINTLN("After detach");
   delay(10000);
 
   /* Set the work done flag back to false */
@@ -413,10 +425,10 @@ int proc_hdlAsleep() {
   _lastIdleTime = millis();
   state_set(STATE_IDLE);
 
-  Serial.println("Send status packet called!");
+  DBG_PRINTLN("Send status packet called!");
   // Send status packet before Idling
   if(comm_sendStatusPacket() == STATUS_OK){
-    Serial.println("Status Packet Sent!");
+    DBG_PRINTLN("Status Packet Sent!");
   }
   return STATUS_OK;
 }
@@ -432,29 +444,18 @@ int proc_hdlListen() {
   memset(&_tStatusPayload, 0, sizeof(_tStatusPayload));
   
   // Listen to data broadcasts from sensor node senders for some time
-  Serial.println("Start listening...");
+  DBG_PRINTLN("Start listening...");
   
   _isDataAvailable = false;
   while(millis() - _lastListenTime <= LISTEN_DURATION){
     if(radio_recv() == STATUS_OK) {
-      Serial.println("Got a message.");
-      /* Parse the received packet */
-      for (int i = 0; i < RH_RF69_MAX_MESSAGE_LEN; i++) {
-        Serial.print(_recvBuf[i]);
-        Serial.print(" ");
-      }
-      Serial.println();
+      DBG_PRINTLN("Got a message.");
 
       // Data payload
       comm_parseHeader(&_tDecodedPacket, _recvBuf, 17);
       comm_parseDataPayload(&_tDataPayload, 
                             _tDecodedPacket.aPayload,
                             _tDecodedPacket.uContentLen);
-
-      for(int i=0; i<_tDecodedPacket.uContentLen; i++){
-        Serial.print(_tDecodedPacket.aPayload[i]); 
-      }
-      Serial.println();
 
       dbg_displayPacketHeader( &_tDecodedPacket );
       dbg_displayDataPayload( &_tDataPayload );
@@ -480,9 +481,6 @@ int proc_hdlListen() {
  * @return  an integer status
  */
 int proc_hdlTransmit() {
-  /* Transmit cached data to destination node */
-  // TODO Go through and empty out cached data
-
   // Transmit only when there is data to transmit
   if(_isDataAvailable == true){
     // Clear the buffer for receiving status data
@@ -495,9 +493,13 @@ int proc_hdlTransmit() {
     comm_writePacket(_sendBuf, &_tDecodedPacket);
   
     while(millis() - _lastTransmitTime <= TRANSMIT_DURATION){
+      DBG_PRINT("Sending to: "); DBG_PRINTLN(DEST_ADDRESS);
       if(lora_send((char*)_sendBuf, sizeof(_sendBuf)) == STATUS_OK){
-        // TODO add number of sending trials?
+        DBG_PRINTLN("Message sent...");
         break;
+      }
+      else{
+        DBG_PRINTLN("Retrying sending...");
       }
     }
   }
@@ -539,18 +541,18 @@ int cfg_processSerialInput() {
     return STATUS_CONTINUE;
   }
 
-  Serial.print("Received: ");
-  Serial.println(aBuf);
+  DBG_PRINT("Received: ");
+  DBG_PRINTLN(aBuf);
 
   if ( strncmp(aBuf, "END", 3) == 0) {
     return STATUS_OK;
   } else if ( strncmp(aBuf, "SET NODE ADDR ", 14) == 0 ) {
-    Serial.print("Node address set to ");
-    Serial.println((int)(aBuf[14]));
+    DBG_PRINT("Node address set to ");
+    DBG_PRINTLN((int)(aBuf[14]));
     
   } else if ( strncmp(aBuf, "SET RELAY ADDR ", 15) == 0 ) {
-    Serial.print("Relay address set to ");
-    Serial.println((int)(aBuf[15]));
+    DBG_PRINT("Relay address set to ");
+    DBG_PRINTLN((int)(aBuf[15]));
     
   }
   
@@ -567,8 +569,8 @@ int cfg_processSerialInput() {
 void state_set(eState_t newState) {
   if (newState != _state) {
     _prevState = _state;
-    Serial.print("State: ");
-    Serial.println(_stateStr[(int)(newState)]);
+    DBG_PRINT("State: ");
+    DBG_PRINTLN(_stateStr[(int)(newState)]);
   }
   _state = newState;
   return;
@@ -595,7 +597,7 @@ void rtc_init() {
   _radioRtc.begin(); // Start the RTC in 24hr mode
 
   if (_rtc.lostPower()) {
-    Serial.println("RTC lost power, lets set the time!");
+    DBG_PRINTLN("RTC lost power, lets set the time!");
     // following line sets the RTC to the date & time this sketch was compiled
     _rtc.adjust(DateTime(F(__DATE__), F(__TIME__)));
   }
@@ -609,7 +611,7 @@ void rtc_init() {
 * @return  an integer status
 */
 int radio_init() {
-  Serial.println("Feather Radio Initialization...");
+  DBG_PRINTLN("Feather Radio Initialization...");
   
   /* Reset the RFM69 radio (?) */
   digitalWrite(RFM69_RST, HIGH);
@@ -619,16 +621,16 @@ int radio_init() {
 
   /* Initialize RF69 Manager */
   if (!_rf69_manager.init()) {
-    Serial.println("RFM69 radio init failed");
+    DBG_PRINTLN("RFM69 radio init failed");
     while (1);
   }
   _rf69_manager.setTimeout(2000);
   
-  Serial.println("RFM69 radio init OK!");
+  DBG_PRINTLN("RFM69 radio init OK!");
   // Defaults after init are 434.0MHz, modulation GFSK_Rb250Fd250, +13dbM (for low power module)
   // No encryptiond
   if (!_rf69.setFrequency(RF69_FREQ)) {
-    Serial.println("setFrequency failed");
+    DBG_PRINTLN("setFrequency failed");
   }
 
   // If you are using a high power RF69 eg RFM69HW, you *must* set a Tx power with the
@@ -639,7 +641,7 @@ int radio_init() {
   uint8_t key[] = { 0x01, 0x02, 0x03, 0x04, 0x05, 0x06, 0x07, 0x08,
                     0x01, 0x02, 0x03, 0x04, 0x05, 0x06, 0x07, 0x08};
   _rf69.setEncryptionKey(key);
-  Serial.print("RFM69 radio @");  Serial.print((int)RF69_FREQ);  Serial.println(" MHz");
+  DBG_PRINT("RFM69 radio @");  DBG_PRINT((int)RF69_FREQ);  DBG_PRINTLN(" MHz");
   return STATUS_OK;
 }
 
@@ -648,7 +650,6 @@ int radio_init() {
  * @return  an integer status
  */
 int radio_recv(){
-  Serial.println();
   if (_rf69_manager.available()) {
     // Wait for a message addressed to us from the client
     uint8_t len = sizeof(_recvBuf);
@@ -657,16 +658,10 @@ int radio_recv(){
     if (_rf69_manager.recvfromAck(_recvBuf, &len, &from)) {
       _recvBuf[len] = 0;
       
-      Serial.print("Got packet from #"); Serial.print(from);
-      Serial.print(" [RSSI :");
-      Serial.print(_rf69.lastRssi());
-      Serial.println("]");
-      
-      for (int i = 0; i < RH_RF69_MAX_MESSAGE_LEN; i++) {
-        Serial.print(_recvBuf[i]);
-        Serial.print(" ");
-      }
-      Serial.println();
+      DBG_PRINT("Got packet from #"); DBG_PRINT(from);
+      DBG_PRINT(" [RSSI :");
+      DBG_PRINT(_rf69.lastRssi());
+      DBG_PRINTLN("]");
 
       return STATUS_OK;
     }
@@ -682,7 +677,7 @@ int radio_recv(){
 * @return  an integer status
 */
 int lora_init(){
-  Serial.println("Arduino LoRa Initialization...");
+  DBG_PRINTLN("Arduino LoRa Initialization...");
   
   // manual reset
   digitalWrite(RFM95_RST, LOW);
@@ -691,17 +686,17 @@ int lora_init(){
   delay(10);
  
   while (!_rf95.init()) {
-    Serial.println("LoRa radio init failed");
+    DBG_PRINTLN("LoRa radio init failed");
     while (1);
   }
-  Serial.println("LoRa radio init OK!");
+  DBG_PRINTLN("LoRa radio init OK!");
  
   // Defaults after init are 434.0MHz, modulation GFSK_Rb250Fd250, +13dbM
   if (!_rf95.setFrequency(RF95_FREQ)) {
-    Serial.println("setFrequency failed");
+    DBG_PRINTLN("setFrequency failed");
     while (1);
   }
-  Serial.print("RM95 radio @"); Serial.println(RF95_FREQ);
+  DBG_PRINT("RM95 radio @"); DBG_PRINTLN(RF95_FREQ);
   
   // Defaults after init are 434.0MHz, 13dBm, Bw = 125 kHz, Cr = 4/5, Sf = 128chips/symbol, CRC on
  
@@ -718,7 +713,6 @@ int lora_init(){
 * @return  an integer status
 */
 int lora_send(char* buf, int len){
-  Serial.println("Start sending.."); delay(10);
   _rf95.send((uint8_t *)buf, len);
   delay(10);
   _rf95.waitPacketSent();
@@ -936,39 +930,39 @@ int comm_sendStatusPacket(){
 #ifdef DEBUG_MODE
 int dbg_displayPacketHeader( tPacket_t* pPacket )
 {
-    Serial.println("Header:");
-    Serial.print("    Type: "); Serial.println((uint8_t)pPacket->uContentType);
-    Serial.print("    Len: "); Serial.println((uint8_t)pPacket->uContentLen);
-    Serial.print("    MajVer: "); Serial.println((uint8_t)pPacket->uMajVer); 
-    Serial.print("    MinVer: "); Serial.println((uint8_t)pPacket->uMinVer);
-    Serial.print("    Timestamp: "); Serial.println((unsigned long)pPacket->uTimestamp);
+    DBG_PRINTLN("Header:");
+    DBG_PRINT("    Type: "); DBG_PRINTLN((uint8_t)pPacket->uContentType);
+    DBG_PRINT("    Len: "); DBG_PRINTLN((uint8_t)pPacket->uContentLen);
+    DBG_PRINT("    MajVer: "); DBG_PRINTLN((uint8_t)pPacket->uMajVer); 
+    DBG_PRINT("    MinVer: "); DBG_PRINTLN((uint8_t)pPacket->uMinVer);
+    DBG_PRINT("    Timestamp: "); DBG_PRINTLN((unsigned long)pPacket->uTimestamp);
 
     return STATUS_OK;
 }
 int dbg_displayDataPayload( tDataPayload_t* pPayload )
 {
-    Serial.println("Payload (Data):");
-    Serial.print("    Source Node Id: "); Serial.println((uint16_t)pPayload->uNodeId);
-    Serial.print("    Dest Node Id: "); Serial.println((uint16_t)pPayload->uRelayId);
-    Serial.print("    pH: "); Serial.println((uint16_t)pPayload->uPH);
-    Serial.print("    Conductivity: "); Serial.println((uint16_t)pPayload->uConductivity);
-    Serial.print("    Light: "); Serial.println((uint16_t)pPayload->uLight);
-    Serial.print("    Temp (Air): "); Serial.println((uint16_t)pPayload->uTempAir);
-    Serial.print("    Humidity: "); Serial.println((uint16_t)pPayload->uHumidity);
-    Serial.print("    Temp (Soil): "); Serial.println((uint16_t)pPayload->uTempSoil);
-    Serial.print("    Moisture: "); Serial.println((uint16_t)pPayload->uMoisture);
-    Serial.print("    Reserved: "); Serial.println((uint16_t)pPayload->uReserved);
+    DBG_PRINTLN("Payload (Data):");
+    DBG_PRINT("    Source Node Id: "); DBG_PRINTLN((uint16_t)pPayload->uNodeId);
+    DBG_PRINT("    Dest Node Id: "); DBG_PRINTLN((uint16_t)pPayload->uRelayId);
+    DBG_PRINT("    pH: "); DBG_PRINTLN((uint16_t)pPayload->uPH);
+    DBG_PRINT("    Conductivity: "); DBG_PRINTLN((uint16_t)pPayload->uConductivity);
+    DBG_PRINT("    Light: "); DBG_PRINTLN((uint16_t)pPayload->uLight);
+    DBG_PRINT("    Temp (Air): "); DBG_PRINTLN((uint16_t)pPayload->uTempAir);
+    DBG_PRINT("    Humidity: "); DBG_PRINTLN((uint16_t)pPayload->uHumidity);
+    DBG_PRINT("    Temp (Soil): "); DBG_PRINTLN((uint16_t)pPayload->uTempSoil);
+    DBG_PRINT("    Moisture: "); DBG_PRINTLN((uint16_t)pPayload->uMoisture);
+    DBG_PRINT("    Reserved: "); DBG_PRINTLN((uint16_t)pPayload->uReserved);
 
     return STATUS_OK;
 }
 
 int dbg_displayStatusPayload( tStatusPayload_t* pPayload )
 {
-    Serial.print("Payload (Status):");
-    Serial.print("    Source Node Id: "); Serial.println((uint16_t)pPayload->uNodeId);
-    Serial.print("    Power: "); Serial.println((uint16_t)pPayload->uPower);
-    Serial.print("    Deployment State: "); Serial.println((uint8_t)pPayload->uDeploymentState);
-    Serial.print("    Status Cod`e: "); Serial.println((uint8_t)pPayload->uStatusCode);
+    DBG_PRINT("Payload (Status):");
+    DBG_PRINT("    Source Node Id: "); DBG_PRINTLN((uint16_t)pPayload->uNodeId);
+    DBG_PRINT("    Power: "); DBG_PRINTLN((uint16_t)pPayload->uPower);
+    DBG_PRINT("    Deployment State: "); DBG_PRINTLN((uint8_t)pPayload->uDeploymentState);
+    DBG_PRINT("    Status Cod`e: "); DBG_PRINTLN((uint8_t)pPayload->uStatusCode);
 
     return STATUS_OK;
 }

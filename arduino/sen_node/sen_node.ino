@@ -1,3 +1,20 @@
+/**
+ * Sensor Node Program
+ * CITAS Dryad 2017
+ * 
+ * Dependencies
+ *  Libraries
+ *    - RadioHead
+ *    - DallasTemperature
+ *    - DHT
+ *    - Moving Average
+ *    - OneWire
+ *    - RTCZero
+ *  Boards
+ *    - Arduino SAMD
+ *    - Adafruit SAMD
+*/
+
 #include <stdio.h>
 #include <string.h>
 #include <stdint.h>
@@ -29,7 +46,7 @@
 #define OFFSET_TEMP       1.00 // To be calibrated
 
 // Change to 434.0 or other frequency, must match RX's freq!
-#define RF69_FREQ         434.0
+#define RF69_FREQ         434.0 // For Radio
 
 #define DEBUG_MODE
 
