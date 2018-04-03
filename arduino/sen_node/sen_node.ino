@@ -39,7 +39,7 @@
 #define PIN_HUM_AIR_TEMP  9
 #define PIN_PH            A0
 #define PIN_LIGHT         A3
-#define PIN_MOISTURE      A5
+#define PIN_MOISTURE      A2
 
 // Sensor value offsets
 #define OFFSET_PH         1.00 // To be calibrated
@@ -363,7 +363,8 @@ int test_send(boolean stat, boolean data) {
     _tDataPayload.uTempAir       = _humAirTemp.readTemperature();
     _tDataPayload.uTempSoil      = digitalRead(PIN_SOIL_TEMP);
     _tDataPayload.uHumidity      = _humAirTemp.readHumidity();
-    _tDataPayload.uMoisture      = _ma.get();
+//    _tDataPayload.uMoisture      = _ma.get();
+    _tDataPayload.uMoisture      = analogRead(PIN_MOISTURE);
     _tDataPayload.uReserved      = 0x03FF;
 
     /* Write data payload to the packet */
