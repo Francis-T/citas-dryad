@@ -31,6 +31,7 @@
 #include <RHMesh.h>
 #include <RHReliableDatagram.h>
 
+// Debugging settings
 #define DEBUG_MSGS_ON
 #if defined(DEBUG_MSGS_ON)
 #define DBG_PRINT(x)    Serial.print(x)
@@ -46,6 +47,10 @@
 /***********************/
 /*    Var definitions  */
 /***********************/
+// Identifiers
+#define ID_REL_NODE       90
+#define ID_AGG_NODE       92
+
 // 434 Frequency for CITAS
 #define RF69_FREQ 434.0
 #define RF95_FREQ 434.0
@@ -55,10 +60,10 @@
 #define ADAFRUIT_LORA_9X
 
 // who am i? (server address)
-#define MY_ADDRESS     90
+#define MY_ADDRESS     ID_REL_NODE
 
 // Destination addresses
-#define DEST_ADDRESS   92               
+#define DEST_ADDRESS   ID_AGG_NODE               
 
 // Pin definitions for Feather and LoRa
 #if defined(ARDUINO_SAMD_FEATHER_M0) // Feather M0 w/Radio
@@ -80,10 +85,10 @@
 #define STATUS_CONTINUE   2
 
 // Duration and Timeout in Milliseconds
-#define IDLE_TIMEOUT      15000
+#define IDLE_TIMEOUT      10000
 #define LISTEN_DURATION   10000
-#define TRANSMIT_DURATION 10000
-#define SLEEP_TIME        10000
+#define TRANSMIT_DURATION 5000
+#define SLEEP_TIME        20000
 
 /** Note: SLEEP_TIME_SECS is separated here because
  *        the RTC wakeup alarm / timer needs it to
@@ -91,7 +96,7 @@
 #define SLEEP_TIME_SECS   SLEEP_TIME / 1000
 
 /* Battery pin definition */
-#define VBATPIN A7
+#define PIN_VBAT A7
 
 /* Data variable definitions */
 #define DEBUG_MODE
@@ -205,7 +210,7 @@ int radio_recv();
 
 int lora_init(void);
 int lora_send(char* buf, int len);
-float utl_measureBatt();
+int utl_measureBatt();
 
 /* Global Variable Declarations */
 RTCZero _radioRtc; // Create Feather / radio RTC object
@@ -220,7 +225,7 @@ eState_t _prevState = STATE_INACTIVE;
 eState_t _state = STATE_INACTIVE;
 
 int _iPacketNum = 0;
-float _fBatt = 0.0;
+int _iBatt = 0.0;
 
 long _lastIdleTime = 0;
 long _lastListenTime = 0;
@@ -280,7 +285,7 @@ void setup() {
  */
 void loop() {
   _now = _rtc.now();
-  _fBatt = utl_measureBatt(); 
+  _iBatt = utl_measureBatt(); 
   
   int iRet = 0;
 
@@ -374,6 +379,10 @@ int proc_hdlUndeployed() {
  * @return  an integer status
  */
 int proc_hdlIdle() {
+  // Send status packet
+  if(comm_sendStatusPacket() == STATUS_OK){
+    DBG_PRINTLN("Status Packet Sent!");
+  }
   
   digitalWrite(LED, HIGH); // Turn LED on to specify the board is awake
   if ((millis() - _lastIdleTime) > IDLE_TIMEOUT) {
@@ -425,11 +434,6 @@ int proc_hdlAsleep() {
   _lastIdleTime = millis();
   state_set(STATE_IDLE);
 
-  DBG_PRINTLN("Send status packet called!");
-  // Send status packet before Idling
-  if(comm_sendStatusPacket() == STATUS_OK){
-    DBG_PRINTLN("Status Packet Sent!");
-  }
   return STATUS_OK;
 }
 
@@ -725,9 +729,8 @@ int lora_send(char* buf, int len){
 /***********************/
 /**   Dummy Functions **/
 /***********************/
-
-float utl_measureBatt() {
-  float batt = analogRead(VBATPIN);
+int utl_measureBatt() {
+  int batt = analogRead(PIN_VBAT);
   batt *= 2; // we divided by 2, so multiply back
   batt *= 3.3; // Multiply by 3.3V, our reference voltage
   batt /= 1024; // convert to voltage
@@ -909,8 +912,8 @@ int comm_sendStatusPacket(){
   }
 
   // Create the status payload
-  _tStatusPayload.uNodeId          = MY_ADDRESS;
-  _tStatusPayload.uPower           = _fBatt;
+  _tStatusPayload.uNodeId          = ID_REL_NODE;
+  _tStatusPayload.uPower           = _iBatt;
   _tStatusPayload.uDeploymentState = 1;
   _tStatusPayload.uStatusCode      = 0xFF;
 

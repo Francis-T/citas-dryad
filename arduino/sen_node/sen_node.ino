@@ -15,12 +15,18 @@
  *    - Adafruit SAMD
 */
 
+/***********************/
+/*      libraries      */
+/***********************/
 #include <stdio.h>
 #include <string.h>
 #include <stdint.h>
 #include <time.h>
 
+// RTC
 #include <RTCZero.h> // Feather internal RTC
+
+// Transmission-related libraries
 #include <SPI.h>
 #include <RH_RF69.h> // For the feather radio
 #include <RHReliableDatagram.h>
@@ -31,9 +37,25 @@
 #include <DallasTemperature.h>
 #include <MovingAverage.h>
 
+// Debugging settings
+#define DEBUG_MSGS_ON
+#if defined(DEBUG_MSGS_ON)
+#define DBG_PRINT(x)    Serial.print(x)
+#define DBG_PRINTLN(x)  Serial.println(x)
+
+#else
+#define DBG_PRINT(x)    NULL;
+#define DBG_PRINTLN(x)  NULL;
+
+#endif
+
 /*************************/
 /*       Definitions     */
 /*************************/
+// Identifiers
+#define ID_SEN_NODE       88
+#define ID_REL_NODE       90
+
 // Sensor pins
 #define PIN_SOIL_TEMP     6
 #define PIN_HUM_AIR_TEMP  9
@@ -57,10 +79,10 @@
 #define PIN_VBAT          A7
 
 // change addresses for each client board, any number :)
-#define MY_ADDRESS        88
+#define MY_ADDRESS        ID_SEN_NODE
 
 // Where to send packets to!
-#define DEST_ADDRESS      90
+#define DEST_ADDRESS      ID_REL_NODE
 
 // Feather M0 w/Radio
 #if defined(ARDUINO_SAMD_FEATHER_M0)
@@ -86,15 +108,6 @@
           be in seconds instead of millisecs */
 #define SLEEP_TIME_SECS   SLEEP_TIME / 1000
 
-// Different possible device states
-typedef enum {
-  STATE_INACTIVE,
-  STATE_UNDEPLOYED,
-  STATE_IDLE,
-  STATE_ASLEEP,
-  STATE_COLLECT,
-  STATE_TRANSMIT,
-} eState_t;
 
 // Payload variables
 #define OFFS_HEADER         0
@@ -113,6 +126,17 @@ typedef enum {
 #define TYPE_REQ_UNKNOWN    0
 #define TYPE_REQ_STATUS     1
 #define TYPE_REQ_DATA       2
+
+// Different possible device states
+typedef enum {
+  STATE_INACTIVE,
+  STATE_UNDEPLOYED,
+  STATE_IDLE,
+  STATE_ASLEEP,
+  STATE_COLLECT,
+  STATE_TRANSMIT,
+} eState_t;
+
 
 // Packet struct
 typedef struct {
@@ -150,7 +174,7 @@ char _stateStr[][12] = {
   "UNDEPLOYED",
   "IDLE",
   "ASLEEP",
-  "LISTEN",
+  "COLLECT",
   "TRANSMIT",
 };
 
@@ -183,6 +207,7 @@ int radio_init();
 int radio_send(char* radioPacket, int packetLen);
 
 int test_send(boolean stat, boolean data);
+int comm_sendStatusPacket();
 
 void state_set(eState_t newState);
 eState_t state_get();
@@ -219,7 +244,6 @@ tStatusPayload_t _tStatusPayload;
 tDataPayload_t _tDataPayload;
 
 bool _workDone = false;   // This flag could be for data collection, retransmission, etc.
-bool _isDataAvailable = false; // This flag will be used as a condition for transmitting
 
 int _sendBufSize = RH_RF69_MAX_MESSAGE_LEN;
 uint8_t _sendBuf[RH_RF69_MAX_MESSAGE_LEN];
@@ -244,60 +268,55 @@ void setup()
 
   // Call initialization for radio
   radio_init();
+
+  // Display addresses
+  DBG_PRINT("Self address @"); DBG_PRINTLN(MY_ADDRESS);
+  DBG_PRINT("Dest address @"); DBG_PRINTLN(DEST_ADDRESS);
 }
 
 void loop() {
-  _lastCollectTime = millis();
-  _iBatt = analogRead(PIN_VBAT);
-  test_send(true, false);
-  delay(500);
+  _iBatt = utl_measureBatt();
+  
+  int iRet = 0;
+  
+  // State switch cases
+  switch (state_get()) {
+    case STATE_INACTIVE:
+      iRet = proc_hdlInactive();
+      break;
 
-  test_send(false, true);
-  delay(1000);
-  /*
-    int iRet = 0;
-    // State switch cases
-    switch (state_get()) {
-      case STATE_INACTIVE:
-        iRet = proc_hdlInactive();
-        break;
+    case STATE_UNDEPLOYED:
+      iRet = proc_hdlUndeployed();
+      break;
 
-      case STATE_UNDEPLOYED:
-        iRet = proc_hdlUndeployed();
-        break;
+    case STATE_IDLE:
+      iRet = proc_hdlIdle();
+      break;
 
-      case STATE_IDLE:
-        iRet = proc_hdlIdle();
-        break;
+    case STATE_COLLECT:
+      iRet = proc_hdlCollect();
+      break;
 
-      case STATE_ASLEEP:
-        iRet = proc_hdlAsleep();
-        break;
+    case STATE_TRANSMIT:
+      iRet = proc_hdlTransmit();
+      break;
 
-      case STATE_COLLECT:
-        iRet = proc_hdlCollect();
-        break;
+    default:
+      break;
+  }
 
-      case STATE_TRANSMIT:
-        iRet = proc_hdlTransmit();
-        break;
+  // Sanity delay
+  delay(10);
 
-      default:
-        break;
-    }
-
-    // Sanity delay
-    delay(10);
-
-    return;*/
+  return;
 }
 
 int test_send(boolean stat, boolean data) {
 
   if (stat == true) {
-    /**************************************************/
-    /** Test creating and sending of a STATUS packet **/
-    /**************************************************/
+    /******************************/
+    /** Creating a STATUS packet **/
+    /******************************/
     /*  Clear all buffers  */
     memset(_sendBuf, '\0', sizeof(_sendBuf) / sizeof(_sendBuf[0]));
     memset(&_tInputPacket, 0, sizeof(_tInputPacket));
@@ -311,7 +330,7 @@ int test_send(boolean stat, boolean data) {
     _tInputPacket.uTimestamp   = millis();
 
     /* Create the status payload */
-    _tStatusPayload.uNodeId          = 144;
+    _tStatusPayload.uNodeId          = ID_SEN_NODE;
     _tStatusPayload.uPower           = _iBatt;
     _tStatusPayload.uDeploymentState = 1;
     _tStatusPayload.uStatusCode      = 0xFF;
@@ -324,14 +343,14 @@ int test_send(boolean stat, boolean data) {
 
 
     for (int i = 0; i < RH_RF69_MAX_MESSAGE_LEN; i++) {
-      Serial.print(_sendBuf[i]);
-      Serial.print(" ");
+      DBG_PRINT(_sendBuf[i]);
+      DBG_PRINT(" ");
     }
-    Serial.println();
+    DBG_PRINTLN();
     /* Send the packet */
-    Serial.println("Sending status packet...");
+    DBG_PRINTLN("Sending status packet...");
     if (radio_send((char*)_sendBuf, LEN_PACKET_STATUS) == STATUS_OK) {
-      Serial.println("Sending success.");
+      DBG_PRINTLN("Sending success.");
     }
   }
 
@@ -355,8 +374,8 @@ int test_send(boolean stat, boolean data) {
     _ma.update(analogRead(PIN_MOISTURE));
 
     /* Create the data payload */
-    _tDataPayload.uNodeId        = 144;
-    _tDataPayload.uRelayId       = 145;
+    _tDataPayload.uNodeId        = ID_SEN_NODE;
+    _tDataPayload.uRelayId       = ID_REL_NODE;
     _tDataPayload.uPH            = analogRead(PIN_PH);
     _tDataPayload.uConductivity  = 0x03FF;
     _tDataPayload.uLight         = analogRead(PIN_LIGHT);
@@ -373,15 +392,15 @@ int test_send(boolean stat, boolean data) {
     /* Finally, write the packet to the sending buffer */
     comm_writePacket(_sendBuf, &_tInputPacket);
     for (int i = 0; i < RH_RF69_MAX_MESSAGE_LEN; i++) {
-      Serial.print(_sendBuf[i]);
-      Serial.print(" ");
+      DBG_PRINT(_sendBuf[i]);
+      DBG_PRINT(" ");
     }
-    Serial.println();
+    DBG_PRINTLN();
 
     /* Send the packet */
-    Serial.println("Sending Data Packet...");
+    DBG_PRINTLN("Sending Data Packet...");
     if (radio_send((char*)_sendBuf, LEN_PACKET_DATA) == STATUS_OK) {
-      Serial.println("Sending success.");
+      DBG_PRINTLN("Sending success.");
     }
   }
 
@@ -422,7 +441,7 @@ int proc_hdlUndeployed() {
       already been deployed before anyway */
   //  if (digitalRead(IS_DEPLOYED_SW) == LOW) {
   while (cfg_processSerialInput() == STATUS_CONTINUE);
-  Serial.println("Starting processes...");
+  DBG_PRINTLN("Starting processes...");
   delay(10);
   //  }
   _lastIdleTime = millis();
@@ -444,6 +463,10 @@ int proc_hdlUndeployed() {
 */
 int proc_hdlIdle() {
 
+  if(comm_sendStatusPacket() == STATUS_OK){
+    DBG_PRINTLN("Status Packet Sent!");
+  }
+  
   digitalWrite(LED, HIGH); // Turn LED on to specify the board is awake
   if ((millis() - _lastIdleTime) > IDLE_TIMEOUT) {
     /* If the time since the device last started idling exceeds the IDLE_TIMEOUT,
@@ -484,7 +507,7 @@ int proc_hdlAsleep() {
 
   /* Re-start the Serial again since we stopped it before detaching */
   Serial.begin(115200);
-  Serial.println("After detach");
+  DBG_PRINTLN("After detach");
   delay(10000);
 
   /* Set the work done flag back to false */
@@ -494,11 +517,6 @@ int proc_hdlAsleep() {
   _lastIdleTime = millis();
   state_set(STATE_IDLE);
 
-  Serial.println("Send status packet called!");
-  // Send status packet before Idling
-  if (comm_sendStatusPacket() == STATUS_OK) {
-    Serial.println("Status Packet Sent!");
-  }
   return STATUS_OK;
 }
 
@@ -507,28 +525,34 @@ int proc_hdlAsleep() {
    @return  an integer status
 */
 int proc_hdlCollect() {
-  _isDataAvailable = false;
-
-  /* Clear the buffers */
+  /* Clear buffers */
+  memset(&_tInputPacket, 0, sizeof(_tInputPacket));
   memset(_sendBuf, '\0', sizeof(_sendBuf) / sizeof(_sendBuf[0]));
   memset(&_tDataPayload, 0, sizeof(_tDataPayload));
-  memset(&_tInputPacket, 0, sizeof(_tInputPacket));
 
-  Serial.println("Start reading...");
+  /* Create the packet header */
+  _tInputPacket.uContentType = TYPE_REQ_DATA;
+  _tInputPacket.uContentLen  = LEN_PAYLOAD_DATA;
+  _tInputPacket.uMajVer      = PROTO_MAJ_VER;
+  _tInputPacket.uMinVer      = PROTO_MIN_VER;
+  _tInputPacket.uTimestamp   = millis();
 
   // Updating Moving Average
   _ma.update(analogRead(PIN_MOISTURE));
 
+  DBG_PRINTLN("Start collecting...");
+
   /* Create the data payload */
-  _tDataPayload.uNodeId        = 144;
-  _tDataPayload.uRelayId       = 145;
+  _tDataPayload.uNodeId        = ID_SEN_NODE;
+  _tDataPayload.uRelayId       = ID_REL_NODE;
   _tDataPayload.uPH            = analogRead(PIN_PH);
   _tDataPayload.uConductivity  = 0x03FF;
   _tDataPayload.uLight         = analogRead(PIN_LIGHT);
   _tDataPayload.uTempAir       = _humAirTemp.readTemperature();
   _tDataPayload.uTempSoil      = digitalRead(PIN_SOIL_TEMP);
   _tDataPayload.uHumidity      = _humAirTemp.readHumidity();
-  _tDataPayload.uMoisture      = _ma.get();
+//    _tDataPayload.uMoisture      = _ma.get();
+  _tDataPayload.uMoisture      = analogRead(PIN_MOISTURE);
   _tDataPayload.uReserved      = 0x03FF;
 
   /* Write data payload to the packet */
@@ -537,8 +561,13 @@ int proc_hdlCollect() {
   /* Finally, write the packet to the sending buffer */
   comm_writePacket(_sendBuf, &_tInputPacket);
 
-  _isDataAvailable = true;
-  delay(200);
+  /* Print sending buffer */
+  for (int i = 0; i < RH_RF69_MAX_MESSAGE_LEN; i++) {
+    DBG_PRINT(_sendBuf[i]);
+    DBG_PRINT(" ");
+  }
+  DBG_PRINTLN();
+
 
   /* Record time before Transmitting*/
   _lastTransmitTime = millis();
@@ -552,15 +581,13 @@ int proc_hdlCollect() {
    @desc    Handler for the STATE_ device state.
    @return  an integer status
 */
-int proc_hdlTransmit() {
+int proc_hdlTransmit() {  
   /* Transmit cached data to destination node */
-  if (_isDataAvailable == true) {
-
-    while (millis() - _lastTransmitTime <= TRANSMIT_DURATION) {
-      if (radio_send((char*)_sendBuf, _sendBufSize) == STATUS_OK) {
-        // TODO add number of sending trials?
-        break;
-      }
+  DBG_PRINT("Sending to: "); DBG_PRINTLN(DEST_ADDRESS);
+  while (millis() - _lastTransmitTime <= TRANSMIT_DURATION) {
+    if (radio_send((char*)_sendBuf, LEN_PACKET_DATA) == STATUS_OK) {
+      DBG_PRINTLN("Message sent...");
+      break;
     }
   }
 
@@ -602,18 +629,18 @@ int cfg_processSerialInput() {
     return STATUS_CONTINUE;
   }
 
-  Serial.print("Received: ");
-  Serial.println(aBuf);
+  DBG_PRINT("Received: ");
+  DBG_PRINTLN(aBuf);
 
   if ( strncmp(aBuf, "END", 3) == 0) {
     return STATUS_OK;
   } else if ( strncmp(aBuf, "SET NODE ADDR ", 14) == 0 ) {
-    Serial.print("Node address set to ");
-    Serial.println((int)(aBuf[14]));
+    DBG_PRINT("Node address set to ");
+    DBG_PRINTLN((int)(aBuf[14]));
 
   } else if ( strncmp(aBuf, "SET RELAY ADDR ", 15) == 0 ) {
-    Serial.print("Relay address set to ");
-    Serial.println((int)(aBuf[15]));
+    DBG_PRINT("Relay address set to ");
+    DBG_PRINTLN((int)(aBuf[15]));
 
   }
 
@@ -631,7 +658,7 @@ int cfg_processSerialInput() {
 void state_set(eState_t newState) {
   if (newState != _state) {
     _prevState = _state;
-    Serial.print("State: ");    Serial.println(_stateStr[(int)(newState)]);
+    DBG_PRINT("State: ");    DBG_PRINTLN(_stateStr[(int)(newState)]);
   }
   _state = newState;
   return;
@@ -648,14 +675,14 @@ eState_t state_get() {
 /***********************/
 /**   Dummy Functions **/
 /***********************/
-/*
-  float utl_measureBatt() {
-  float batt = analogRead(PIN_VBAT);
+
+int utl_measureBatt() {
+  int batt = analogRead(PIN_VBAT);
   batt *= 2; // we divided by 2, so multiply back
   batt *= 3.3; // Multiply by 3.3V, our reference voltage
   batt /= 1024; // convert to voltage
   return batt;
-  }*/
+}
 
 void utl_hdlInterrupt() {
 
@@ -679,7 +706,7 @@ int sensors_init() {
 /******************************/
 
 int radio_init() {
-  Serial.println("Feather Radio Initialization...");
+  DBG_PRINTLN("Feather Radio Initialization...");
 
   /* Reset the RFM69 radio (?) */
   digitalWrite(RFM69_RST, HIGH);
@@ -689,16 +716,16 @@ int radio_init() {
 
   /* Initialize RF69 Manager */
   if (!_rf69_manager.init()) {
-    Serial.println("RFM69 radio init failed");
+    DBG_PRINTLN("RFM69 radio init failed");
     while (1);
   }
   _rf69_manager.setTimeout(2000);
 
-  Serial.println("RFM69 radio init OK!");
+  DBG_PRINTLN("RFM69 radio init OK!");
   // Defaults after init are 434.0MHz, modulation GFSK_Rb250Fd250, +13dbM (for low power module)
   // No encryptiond
   if (!_rf69.setFrequency(RF69_FREQ)) {
-    Serial.println("setFrequency failed");
+    DBG_PRINTLN("setFrequency failed");
   }
 
   // If you are using a high power RF69 eg RFM69HW, you *must* set a Tx power with the
@@ -710,7 +737,7 @@ int radio_init() {
                     0x01, 0x02, 0x03, 0x04, 0x05, 0x06, 0x07, 0x08
                   };
   _rf69.setEncryptionKey(key);
-  Serial.print("RFM69 radio @");  Serial.print((int)RF69_FREQ);  Serial.println(" MHz");
+  DBG_PRINT("RFM69 radio @");  DBG_PRINT((int)RF69_FREQ);  DBG_PRINTLN(" MHz");
 
   return STATUS_OK;
 }
@@ -725,16 +752,16 @@ int radio_send(char* radioPacket, int packetLen) {
     if (_rf69_manager.recvfromAckTimeout(_sendBuf, &len, 2000, &from)) {
       _sendBuf[len] = 0; // zero out remaining string
 
-      Serial.print("Got reply from #"); Serial.print(from);
-      Serial.print(" [RSSI :");
-      Serial.print(_rf69.lastRssi());
-      Serial.print("] : ");
-      Serial.println((char*)_sendBuf);
+      DBG_PRINT("Got reply from #"); DBG_PRINT(from);
+      DBG_PRINT(" [RSSI :");
+      DBG_PRINT(_rf69.lastRssi());
+      DBG_PRINT("] : ");
+      DBG_PRINTLN((char*)_sendBuf);
     } else {
-      Serial.println("No reply, is anyone listening?");
+      DBG_PRINTLN("No reply, is anyone listening?");
     }
   } else {
-    Serial.println("Sending failed (no ack)");
+    DBG_PRINTLN("Sending failed (no ack)");
   }
   return STATUS_OK;
 }
@@ -894,12 +921,12 @@ int comm_setPacketHeader() {
   _tInputPacket.uContentLen  = LEN_PAYLOAD_STATUS;
   _tInputPacket.uMajVer      = PROTO_MAJ_VER;
   _tInputPacket.uMinVer      = PROTO_MIN_VER;
+  _tInputPacket.uTimestamp   = millis();
 
   return STATUS_OK;
 }
 
 int comm_sendStatusPacket() {
-  // Clear and create the packet
   memset(_sendBuf, '\0', sizeof(_sendBuf) / sizeof(_sendBuf[0]));
   memset(&_tStatusPayload, 0, sizeof(_tStatusPayload));
 
@@ -907,8 +934,8 @@ int comm_sendStatusPacket() {
     return STATUS_FAILED;
   }
 
-  // Create the status payload
-  _tStatusPayload.uNodeId          = MY_ADDRESS;
+  /* Create the status payload */
+  _tStatusPayload.uNodeId          = ID_SEN_NODE;
   _tStatusPayload.uPower           = _iBatt;
   _tStatusPayload.uDeploymentState = 1;
   _tStatusPayload.uStatusCode      = 0xFF;
@@ -917,27 +944,21 @@ int comm_sendStatusPacket() {
   comm_createStatusPayload(_tInputPacket.aPayload, &_tStatusPayload);
   comm_writePacket(_sendBuf, &_tInputPacket);
 
-  // Send the packet
-  if (radio_send((char *)_sendBuf, LEN_PACKET_STATUS) == STATUS_OK) {
+
+  // Display Send buffer
+  for (int i = 0; i < RH_RF69_MAX_MESSAGE_LEN; i++) {
+    DBG_PRINT(_sendBuf[i]);
+    DBG_PRINT(" ");
+  }
+  DBG_PRINTLN();
+  /* Send the packet */
+  DBG_PRINTLN("Sending status packet...");
+  if (radio_send((char*)_sendBuf, LEN_PACKET_STATUS) == STATUS_OK) {
+    DBG_PRINTLN("Sending success.");
     return STATUS_OK;
   }
 
   return STATUS_FAILED;
 }
-
-#ifdef DEBUG_MODE
-int dbg_displayPacketHeader( tPacket_t* pPacket )
-{
-  Serial.println("Header:");
-  Serial.print("    Type: "); Serial.println((uint8_t)pPacket->uContentType);
-  Serial.print("    Len: "); Serial.println((uint8_t)pPacket->uContentLen);
-  Serial.print("    MajVer: "); Serial.println((uint8_t)pPacket->uMajVer);
-  Serial.print("    MinVer: "); Serial.println((uint8_t)pPacket->uMinVer);
-  Serial.print("    Timestamp: "); Serial.println((unsigned long)pPacket->uTimestamp);
-
-  return STATUS_OK;
-}
-#endif
-
 
 
