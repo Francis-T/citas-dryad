@@ -86,8 +86,9 @@
 
 // Duration and Timeout in Milliseconds
 #define IDLE_TIMEOUT      10000
-#define LISTEN_DURATION   10000
-#define TRANSMIT_DURATION 5000
+#define LISTEN_TIMEOUT    20000
+#define TRANSMIT_TIMEOUT  2000
+#define LIS_TX_DURATION   30000
 #define SLEEP_TIME        20000
 
 /** Note: SLEEP_TIME_SECS is separated here because
@@ -229,7 +230,7 @@ int _iBatt = 0.0;
 
 long _lastIdleTime = 0;
 long _lastListenTime = 0;
-long _lastTransmitTime = 0;
+long _LisTxStartTime = 0;
 bool _workDone = false;   /* This flag could be for data collection, retransmission, etc. */
 
 uint8_t _recvBuf[RH_RF69_MAX_MESSAGE_LEN];
@@ -349,17 +350,17 @@ int proc_hdlUndeployed() {
    *  in order to configure it. In the case of the Field Nodes, this can be used to set things
    *  like the node address of the node itself, or the node address of its target node.
    */
-  while (!Serial);
-  while (Serial.available() == false);
+//  while (!Serial);
+//  while (Serial.available() == false);
 
   /* Force the node to be manually configured before it can be used --
    *  we can have an external switch that is checked through digitalRead() 
    *  to allow this configuration process to be skipped when this node has
    *  already been deployed before anyway */
 //  if (digitalRead(IS_DEPLOYED_SW) == LOW) {
-      while (cfg_processSerialInput() == STATUS_CONTINUE);
-        DBG_PRINTLN("Starting processes...");
-        delay(10);
+//      while (cfg_processSerialInput() == STATUS_CONTINUE);
+        DBG_PRINTLN("==> [SYS] Starting processes.");
+//        delay(10);
 //  }
   _lastIdleTime = millis();
   state_set(STATE_IDLE);
@@ -379,19 +380,23 @@ int proc_hdlUndeployed() {
  * @return  an integer status
  */
 int proc_hdlIdle() {
-  // Send status packet
-  if(comm_sendStatusPacket() == STATUS_OK){
-    DBG_PRINTLN("Status Packet Sent!");
-  }
-  
   digitalWrite(LED, HIGH); // Turn LED on to specify the board is awake
+  
   if ((millis() - _lastIdleTime) > IDLE_TIMEOUT) {
     /* If the time since the device last started idling exceeds the IDLE_TIMEOUT,
      *  then it is time to put the device back to the ASLEEP state for a bit */
     state_set(STATE_ASLEEP);
     
   } else if (_workDone == false) {
+    // Send status packet
+    if(comm_sendStatusPacket() == STATUS_OK){
+      DBG_PRINTLN("==> [TX] Sent status packet.");
+    }
+    else{
+      DBG_PRINTLN("==> [TX] Failed sensor status sending.");
+    }
     /* Record time before LISTEN */
+    _LisTxStartTime = millis();
     _lastListenTime = millis();
     state_set(STATE_LISTEN);
     _workDone = true;
@@ -424,8 +429,6 @@ int proc_hdlAsleep() {
   
   /* Re-start the Serial again since we stopped it before detaching */
   Serial.begin(115200);
-  DBG_PRINTLN("After detach");
-  delay(10000);
 
   /* Set the work done flag back to false */
   _workDone = false;
@@ -448,32 +451,42 @@ int proc_hdlListen() {
   memset(&_tStatusPayload, 0, sizeof(_tStatusPayload));
   
   // Listen to data broadcasts from sensor node senders for some time
-  DBG_PRINTLN("Start listening...");
+  DBG_PRINTLN("==> [LIS] Listening for broadcasts.");
   
   _isDataAvailable = false;
-  while(millis() - _lastListenTime <= LISTEN_DURATION){
+  while(millis() - _lastListenTime <= LISTEN_TIMEOUT){
     if(radio_recv() == STATUS_OK) {
-      DBG_PRINTLN("Got a message.");
 
-      // Data payload
+      /* Check the type of data received */
       comm_parseHeader(&_tDecodedPacket, _recvBuf, 17);
-      comm_parseDataPayload(&_tDataPayload, 
-                            _tDecodedPacket.aPayload,
-                            _tDecodedPacket.uContentLen);
-
-      dbg_displayPacketHeader( &_tDecodedPacket );
-      dbg_displayDataPayload( &_tDataPayload );
-
       
+      if(_tDecodedPacket.uContentType == TYPE_REQ_STATUS) {
+        DBG_PRINTLN("==> [RX] Received status packet.");
+        comm_parseStatusPayload(&_tStatusPayload, 
+                                _tDecodedPacket.aPayload,
+                                _tDecodedPacket.uContentLen);
+        dbg_displayPacketHeader( &_tDecodedPacket );
+        dbg_displayStatusPayload( &_tStatusPayload );
+      } 
+      else if(_tDecodedPacket.uContentType == TYPE_REQ_DATA) {
+        DBG_PRINTLN("==> [RX] Received data packet.");
+        comm_parseHeader(&_tDecodedPacket, _recvBuf, 17);
+        comm_parseDataPayload(&_tDataPayload, 
+                              _tDecodedPacket.aPayload,
+                              _tDecodedPacket.uContentLen);
+        dbg_displayPacketHeader( &_tDecodedPacket );
+        dbg_displayDataPayload( &_tDataPayload );
+      } 
+      else {
+        DBG_PRINTLN("==> [RX] Unrecognizable data content type.");
+      }
+
       _isDataAvailable = true;
       
       break; // Break out of while loop once data is received
     }
-    delay(200); // Sanity delay
+    delay(500); // Sanity delay
   }
-  
-  /* Record time before Transmitting*/
-  _lastTransmitTime = millis();
   
   /* Set the state machine to STATE_TRANSMIT */
   state_set(STATE_TRANSMIT);
@@ -496,16 +509,22 @@ int proc_hdlTransmit() {
     _tDecodedPacket.uTimestamp = _now.unixtime();
     comm_writePacket(_sendBuf, &_tDecodedPacket);
   
-    while(millis() - _lastTransmitTime <= TRANSMIT_DURATION){
-      DBG_PRINT("Sending to: "); DBG_PRINTLN(DEST_ADDRESS);
+    while(millis() - _LisTxStartTime <= TRANSMIT_TIMEOUT){
       if(lora_send((char*)_sendBuf, sizeof(_sendBuf)) == STATUS_OK){
-        DBG_PRINTLN("Message sent...");
+        DBG_PRINTLN("==> [TX] Sent sensor data to aggregator node "); 
+        DBG_PRINT(DEST_ADDRESS);
         break;
       }
       else{
-        DBG_PRINTLN("Retrying sending...");
+        DBG_PRINTLN("==> [TX] Retrying sending.");
       }
     }
+  }
+  /* Start listening again until listening duration is exhausted */
+  if (millis() - _LisTxStartTime <= LIS_TX_DURATION) {
+    _lastListenTime = millis();
+    state_set(STATE_LISTEN);
+    return STATUS_OK;
   }
 
   /* Finally, set the state machine back to STATE_IDLE */
@@ -892,7 +911,7 @@ int comm_setPacketHeader(){
   memset(&_tInputPacket, 0, sizeof(_tInputPacket));
 
   // Create the packet header
-  _tInputPacket.uContentType = TYPE_REQ_UNKNOWN;
+  _tInputPacket.uContentType = TYPE_REQ_STATUS;
   _tInputPacket.uContentLen  = LEN_PAYLOAD_STATUS;
   _tInputPacket.uMajVer      = PROTO_MAJ_VER;
   _tInputPacket.uMinVer      = PROTO_MIN_VER;
@@ -965,7 +984,7 @@ int dbg_displayStatusPayload( tStatusPayload_t* pPayload )
     DBG_PRINT("    Source Node Id: "); DBG_PRINTLN((uint16_t)pPayload->uNodeId);
     DBG_PRINT("    Power: "); DBG_PRINTLN((uint16_t)pPayload->uPower);
     DBG_PRINT("    Deployment State: "); DBG_PRINTLN((uint8_t)pPayload->uDeploymentState);
-    DBG_PRINT("    Status Cod`e: "); DBG_PRINTLN((uint8_t)pPayload->uStatusCode);
+    DBG_PRINT("    Status Code: "); DBG_PRINTLN((uint8_t)pPayload->uStatusCode);
 
     return STATUS_OK;
 }

@@ -98,10 +98,10 @@
 #define STATUS_CONTINUE   2
 
 // Duration and Timeout in Milliseconds
-#define IDLE_TIMEOUT      15000
-#define COLLECT_DURATION  10000
-#define TRANSMIT_DURATION 10000
-#define SLEEP_TIME        10000
+#define IDLE_TIMEOUT        15000
+#define TRANSMIT_TIMEOUT    1000
+#define COL_TX_DURATION     50000
+#define SLEEP_TIME          10000
 
 /** Note: SLEEP_TIME_SECS is separated here because
           the RTC wakeup alarm / timer needs it to
@@ -123,7 +123,7 @@
 #define PROTO_MAJ_VER       0
 #define PROTO_MIN_VER       1
 
-#define TYPE_REQ_UNKNOWN    0
+#define w_UNKNOWN    0
 #define TYPE_REQ_STATUS     1
 #define TYPE_REQ_DATA       2
 
@@ -235,7 +235,7 @@ eState_t _state = STATE_INACTIVE;
 
 int _iBatt              = 0;
 long _lastIdleTime      = 0;
-long _lastCollectTime   = 0;
+long _ColTxStartTime    = 0;
 long _lastTransmitTime  = 0;
 
 tPacket_t   _tInputPacket;
@@ -301,6 +301,10 @@ void loop() {
       iRet = proc_hdlTransmit();
       break;
 
+    case STATE_ASLEEP:
+      iRet = proc_hdlAsleep();
+      break;
+
     default:
       break;
   }
@@ -311,102 +315,6 @@ void loop() {
   return;
 }
 
-int test_send(boolean stat, boolean data) {
-
-  if (stat == true) {
-    /******************************/
-    /** Creating a STATUS packet **/
-    /******************************/
-    /*  Clear all buffers  */
-    memset(_sendBuf, '\0', sizeof(_sendBuf) / sizeof(_sendBuf[0]));
-    memset(&_tInputPacket, 0, sizeof(_tInputPacket));
-    memset(&_tStatusPayload, 0, sizeof(_tStatusPayload));
-
-    /* Create the packet header */
-    _tInputPacket.uContentType = TYPE_REQ_STATUS;
-    _tInputPacket.uContentLen  = LEN_PAYLOAD_STATUS;
-    _tInputPacket.uMajVer      = PROTO_MAJ_VER;
-    _tInputPacket.uMinVer      = PROTO_MIN_VER;
-    _tInputPacket.uTimestamp   = millis();
-
-    /* Create the status payload */
-    _tStatusPayload.uNodeId          = ID_SEN_NODE;
-    _tStatusPayload.uPower           = _iBatt;
-    _tStatusPayload.uDeploymentState = 1;
-    _tStatusPayload.uStatusCode      = 0xFF;
-
-    /* Write status payload to the packet */
-    comm_createStatusPayload(_tInputPacket.aPayload, &_tStatusPayload);
-
-    /* Finally, write the packet to the sending buffer */
-    comm_writePacket(_sendBuf, &_tInputPacket);
-
-
-    for (int i = 0; i < RH_RF69_MAX_MESSAGE_LEN; i++) {
-      DBG_PRINT(_sendBuf[i]);
-      DBG_PRINT(" ");
-    }
-    DBG_PRINTLN();
-    /* Send the packet */
-    DBG_PRINTLN("Sending status packet...");
-    if (radio_send((char*)_sendBuf, LEN_PACKET_STATUS) == STATUS_OK) {
-      DBG_PRINTLN("Sending success.");
-    }
-  }
-
-  if (data == true) {
-    /************************************************/
-    /** Test creating and sending of a DATA packet **/
-    /************************************************/
-
-    memset(_sendBuf, '\0', sizeof(_sendBuf) / sizeof(_sendBuf[0]));
-    memset(&_tDataPayload, 0, sizeof(_tDataPayload));
-    memset(&_tInputPacket, 0, sizeof(_tInputPacket));
-
-    /* Create the packet header */
-    _tInputPacket.uContentType = TYPE_REQ_DATA;
-    _tInputPacket.uContentLen  = LEN_PAYLOAD_DATA;
-    _tInputPacket.uMajVer      = PROTO_MAJ_VER;
-    _tInputPacket.uMinVer      = PROTO_MIN_VER;
-    _tInputPacket.uTimestamp   = millis();
-
-    // Updating Moving Average
-    _ma.update(analogRead(PIN_MOISTURE));
-
-    /* Create the data payload */
-    _tDataPayload.uNodeId        = ID_SEN_NODE;
-    _tDataPayload.uRelayId       = ID_REL_NODE;
-    _tDataPayload.uPH            = analogRead(PIN_PH);
-    _tDataPayload.uConductivity  = 0x03FF;
-    _tDataPayload.uLight         = analogRead(PIN_LIGHT);
-    _tDataPayload.uTempAir       = _humAirTemp.readTemperature();
-    _tDataPayload.uTempSoil      = digitalRead(PIN_SOIL_TEMP);
-    _tDataPayload.uHumidity      = _humAirTemp.readHumidity();
-//    _tDataPayload.uMoisture      = _ma.get();
-    _tDataPayload.uMoisture      = analogRead(PIN_MOISTURE);
-    _tDataPayload.uReserved      = 0x03FF;
-
-    /* Write data payload to the packet */
-    comm_createDataPayload(_tInputPacket.aPayload, &_tDataPayload);
-
-    /* Finally, write the packet to the sending buffer */
-    comm_writePacket(_sendBuf, &_tInputPacket);
-    for (int i = 0; i < RH_RF69_MAX_MESSAGE_LEN; i++) {
-      DBG_PRINT(_sendBuf[i]);
-      DBG_PRINT(" ");
-    }
-    DBG_PRINTLN();
-
-    /* Send the packet */
-    DBG_PRINTLN("Sending Data Packet...");
-    if (radio_send((char*)_sendBuf, LEN_PACKET_DATA) == STATUS_OK) {
-      DBG_PRINTLN("Sending success.");
-    }
-  }
-
-  delay(100);  // Wait 1 second between transmits, could also 'sleep' here!
-  return STATUS_OK;
-}
 
 /**************************************************/
 /**   Processing Functions for each device state **/
@@ -432,17 +340,17 @@ int proc_hdlUndeployed() {
       in order to configure it. In the case of the Field Nodes, this can be used to set things
       like the node address of the node itself, or the node address of its target node.
   */
-  while (!Serial);
-  while (Serial.available() == false);
+//  while (!Serial);
+//  while (Serial.available() == false);
 
   /* Force the node to be manually configured before it can be used --
       we can have an external switch that is checked through digitalRead()
       to allow this configuration process to be skipped when this node has
       already been deployed before anyway */
   //  if (digitalRead(IS_DEPLOYED_SW) == LOW) {
-  while (cfg_processSerialInput() == STATUS_CONTINUE);
-  DBG_PRINTLN("Starting processes...");
-  delay(10);
+//  while (cfg_processSerialInput() == STATUS_CONTINUE);
+  DBG_PRINTLN("==> [SYS] Starting processes.");
+//  delay(10);
   //  }
   _lastIdleTime = millis();
   state_set(STATE_IDLE);
@@ -462,12 +370,8 @@ int proc_hdlUndeployed() {
    @return  an integer status
 */
 int proc_hdlIdle() {
-
-  if(comm_sendStatusPacket() == STATUS_OK){
-    DBG_PRINTLN("Status Packet Sent!");
-  }
-  
   digitalWrite(LED, HIGH); // Turn LED on to specify the board is awake
+  
   if ((millis() - _lastIdleTime) > IDLE_TIMEOUT) {
     /* If the time since the device last started idling exceeds the IDLE_TIMEOUT,
         then it is time to put the device back to the ASLEEP state for a bit */
@@ -475,7 +379,7 @@ int proc_hdlIdle() {
 
   } else if (_workDone == false) {
     /* Record time before COLLECT */
-    _lastCollectTime = millis();
+    _ColTxStartTime = millis();
     state_set(STATE_COLLECT);
     _workDone = true;
 
@@ -496,9 +400,9 @@ int proc_hdlAsleep() {
   _radioRtc.setAlarmSeconds(iWakeupTime);         // RTC time to wake, currently seconds only
   _radioRtc.enableAlarm(_radioRtc.MATCH_SS);            // Match seconds only
   _radioRtc.attachInterrupt(utl_hdlInterrupt); // Attaches function to be called, currently blank
-  delay(50); // Brief delay prior to sleeping not really sure its required
 
   digitalWrite(LED, LOW); // Turn LED off to specify board is asleep
+  delay(10); // Brief delay prior to sleeping not really sure its required
 
   Serial.end();
   USBDevice.detach(); // Safely detach the USB prior to sleeping
@@ -507,8 +411,6 @@ int proc_hdlAsleep() {
 
   /* Re-start the Serial again since we stopped it before detaching */
   Serial.begin(115200);
-  DBG_PRINTLN("After detach");
-  delay(10000);
 
   /* Set the work done flag back to false */
   _workDone = false;
@@ -525,6 +427,12 @@ int proc_hdlAsleep() {
    @return  an integer status
 */
 int proc_hdlCollect() {
+  if(comm_sendStatusPacket() == STATUS_OK){
+    DBG_PRINTLN("==> [TX] Sent sensor status.");
+  }
+  else{
+    DBG_PRINTLN("==> [TX] Failed sensor status sending.");
+  }
   /* Clear buffers */
   memset(&_tInputPacket, 0, sizeof(_tInputPacket));
   memset(_sendBuf, '\0', sizeof(_sendBuf) / sizeof(_sendBuf[0]));
@@ -539,8 +447,6 @@ int proc_hdlCollect() {
 
   // Updating Moving Average
   _ma.update(analogRead(PIN_MOISTURE));
-
-  DBG_PRINTLN("Start collecting...");
 
   /* Create the data payload */
   _tDataPayload.uNodeId        = ID_SEN_NODE;
@@ -561,13 +467,7 @@ int proc_hdlCollect() {
   /* Finally, write the packet to the sending buffer */
   comm_writePacket(_sendBuf, &_tInputPacket);
 
-  /* Print sending buffer */
-  for (int i = 0; i < RH_RF69_MAX_MESSAGE_LEN; i++) {
-    DBG_PRINT(_sendBuf[i]);
-    DBG_PRINT(" ");
-  }
-  DBG_PRINTLN();
-
+  DBG_PRINTLN("==> [COL] Sensor data ready.");
 
   /* Record time before Transmitting*/
   _lastTransmitTime = millis();
@@ -583,15 +483,24 @@ int proc_hdlCollect() {
 */
 int proc_hdlTransmit() {  
   /* Transmit cached data to destination node */
-  DBG_PRINT("Sending to: "); DBG_PRINTLN(DEST_ADDRESS);
-  while (millis() - _lastTransmitTime <= TRANSMIT_DURATION) {
+  
+  while (millis() - _lastTransmitTime <= TRANSMIT_TIMEOUT) {
     if (radio_send((char*)_sendBuf, LEN_PACKET_DATA) == STATUS_OK) {
-      DBG_PRINTLN("Message sent...");
+      DBG_PRINT("==> [TX] Sent sensor data to relay node address "); DBG_PRINTLN(DEST_ADDRESS);
       break;
     }
+    else{
+      DBG_PRINT("==> [TX] Failed sensor data sending.");
+    }
+  }
+  
+  /* Start collection again until collection duration is exhausted */
+  if (millis() - _ColTxStartTime <= COL_TX_DURATION) {
+    state_set(STATE_COLLECT);
+    return STATUS_OK;
   }
 
-  /* Finally, set the state machine back to STATE_IDLE */
+    /* Finally, set the state machine back to STATE_IDLE */
   _lastIdleTime = millis();
   state_set(STATE_IDLE);
 
@@ -743,25 +652,20 @@ int radio_init() {
 }
 
 int radio_send(char* radioPacket, int packetLen) {
-  // Send a message to the DESTINATION!
-
+  // Send a message to the DESTINATION
   if (_rf69_manager.sendtoWait((uint8_t *)radioPacket, packetLen, DEST_ADDRESS)) {
-    // Now wait for a reply from the server
+    // Now wait for a reply from the server    
     uint8_t len = sizeof(_sendBuf);
     uint8_t from;
-    if (_rf69_manager.recvfromAckTimeout(_sendBuf, &len, 2000, &from)) {
+    if (_rf69_manager.recvfromAckTimeout(_sendBuf, &len, 1000, &from)) {
       _sendBuf[len] = 0; // zero out remaining string
 
-      DBG_PRINT("Got reply from #"); DBG_PRINT(from);
+      DBG_PRINT("==> [RX] Got reply from #"); DBG_PRINT(from);
       DBG_PRINT(" [RSSI :");
       DBG_PRINT(_rf69.lastRssi());
       DBG_PRINT("] : ");
       DBG_PRINTLN((char*)_sendBuf);
-    } else {
-      DBG_PRINTLN("No reply, is anyone listening?");
     }
-  } else {
-    DBG_PRINTLN("Sending failed (no ack)");
   }
   return STATUS_OK;
 }
@@ -917,7 +821,7 @@ int comm_setPacketHeader() {
   memset(&_tInputPacket, 0, sizeof(_tInputPacket));
 
   // Create the packet header
-  _tInputPacket.uContentType = TYPE_REQ_UNKNOWN;
+  _tInputPacket.uContentType = TYPE_REQ_STATUS;
   _tInputPacket.uContentLen  = LEN_PAYLOAD_STATUS;
   _tInputPacket.uMajVer      = PROTO_MAJ_VER;
   _tInputPacket.uMinVer      = PROTO_MIN_VER;
@@ -944,17 +848,7 @@ int comm_sendStatusPacket() {
   comm_createStatusPayload(_tInputPacket.aPayload, &_tStatusPayload);
   comm_writePacket(_sendBuf, &_tInputPacket);
 
-
-  // Display Send buffer
-  for (int i = 0; i < RH_RF69_MAX_MESSAGE_LEN; i++) {
-    DBG_PRINT(_sendBuf[i]);
-    DBG_PRINT(" ");
-  }
-  DBG_PRINTLN();
-  /* Send the packet */
-  DBG_PRINTLN("Sending status packet...");
   if (radio_send((char*)_sendBuf, LEN_PACKET_STATUS) == STATUS_OK) {
-    DBG_PRINTLN("Sending success.");
     return STATUS_OK;
   }
 

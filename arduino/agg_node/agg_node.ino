@@ -42,9 +42,13 @@
 
 #endif
 
+
 /***********************/
 /*    Var definitions  */
 /***********************/
+// Identifier
+#define ID_AGG_NODE       92
+
 // 434 Frequency for CITAS
 #define RF69_FREQ 434.0
 #define RF95_FREQ 434.0
@@ -54,7 +58,7 @@
 #define ADAFRUIT_LORA_9X
 
 // who am i? (server address)
-#define MY_ADDRESS     92
+#define MY_ADDRESS     ID_AGG_NODE
 
 // Pin definitions for Feather and LoRa
 #if defined(ARDUINO_SAMD_FEATHER_M0) // Feather M0 w/Radio
@@ -75,18 +79,7 @@
 #define STATUS_OK         1
 #define STATUS_CONTINUE   2
 
-// Duration and Timeout in Milliseconds
-#define IDLE_TIMEOUT      15000
-#define LISTEN_DURATION   10000
-#define TRANSMIT_DURATION 10000
-#define SLEEP_TIME        10000
-
-/** Note: SLEEP_TIME_SECS is separated here because
-          the RTC wakeup alarm / timer needs it to
-          be in seconds instead of millisecs */
-#define SLEEP_TIME_SECS   SLEEP_TIME / 1000
-
-/* Battery pin definition */
+// Battery pin definition
 #define VBATPIN A7
 
 /* Data variable definitions */
@@ -631,42 +624,42 @@ int comm_sendStatusPacket() {
 #ifdef DEBUG_MODE
 int dbg_displayPacketHeader( tPacket_t* pPacket )
 {
-  Serial.print("'Part' : 'Header', 'Content' : {");
-  Serial.print(" 'Type' : "); Serial.print((uint8_t)pPacket->uContentType); Serial.print(",");
-  Serial.print(" 'Len' : "); Serial.print((uint8_t)pPacket->uContentLen); Serial.print(",");
-  Serial.print(" 'MajVer' : "); Serial.print((uint8_t)pPacket->uMajVer); Serial.print(",");
-  Serial.print(" 'MinVer' : "); Serial.print((uint8_t)pPacket->uMinVer); Serial.print(",");
-  Serial.print(" 'Timestamp' : "); Serial.print((unsigned long)pPacket->uTimestamp);
-  Serial.println(" }");
+  DBG_PRINT("'Part' : 'Header', 'Content' : {");
+  DBG_PRINT(" 'Type' : "); DBG_PRINT((uint8_t)pPacket->uContentType); DBG_PRINT(",");
+  DBG_PRINT(" 'Len' : "); DBG_PRINT((uint8_t)pPacket->uContentLen); DBG_PRINT(",");
+  DBG_PRINT(" 'MajVer' : "); DBG_PRINT((uint8_t)pPacket->uMajVer); DBG_PRINT(",");
+  DBG_PRINT(" 'MinVer' : "); DBG_PRINT((uint8_t)pPacket->uMinVer); DBG_PRINT(",");
+  DBG_PRINT(" 'Timestamp' : "); DBG_PRINT((unsigned long)pPacket->uTimestamp);
+  DBG_PRINTLN(" }");
 
   return STATUS_OK;
 }
 int dbg_displayDataPayload( tDataPayload_t* pPayload )
 {
-  Serial.print("'Part' : 'Payload (Data)', 'Content' : {");
-  Serial.print(" 'Source Node Id' : "); Serial.print((uint16_t)pPayload->uNodeId); Serial.print(",");
-  Serial.print(" 'Dest Node Id' : "); Serial.print((uint16_t)pPayload->uRelayId); Serial.print(",");
-  Serial.print(" 'pH' : "); Serial.print((uint16_t)pPayload->uPH); Serial.print(",");
-  Serial.print(" 'Conductivity' : "); Serial.print((uint16_t)pPayload->uConductivity); Serial.print(",");
-  Serial.print(" 'Light' : "); Serial.print((uint16_t)pPayload->uLight); Serial.print(",");
-  Serial.print(" 'Temp (Air)' : "); Serial.print((uint16_t)pPayload->uTempAir); Serial.print(",");
-  Serial.print(" 'Humidity' : "); Serial.print((uint16_t)pPayload->uHumidity); Serial.print(",");
-  Serial.print(" 'Temp (Soil)' : "); Serial.print((uint16_t)pPayload->uTempSoil); Serial.print(",");
-  Serial.print(" 'Moisture' : "); Serial.print((uint16_t)pPayload->uMoisture); Serial.print(",");
-  Serial.print(" 'Reserved' : "); Serial.print((uint16_t)pPayload->uReserved);
-  Serial.println(" }");
+  DBG_PRINT("'Part' : 'Payload (Data)', 'Content' : {");
+  DBG_PRINT(" 'Source Node Id' : "); DBG_PRINT((uint16_t)pPayload->uNodeId); DBG_PRINT(",");
+  DBG_PRINT(" 'Dest Node Id' : "); DBG_PRINT((uint16_t)pPayload->uRelayId); DBG_PRINT(",");
+  DBG_PRINT(" 'pH' : "); DBG_PRINT((uint16_t)pPayload->uPH); DBG_PRINT(",");
+  DBG_PRINT(" 'Conductivity' : "); DBG_PRINT((uint16_t)pPayload->uConductivity); DBG_PRINT(",");
+  DBG_PRINT(" 'Light' : "); DBG_PRINT((uint16_t)pPayload->uLight); DBG_PRINT(",");
+  DBG_PRINT(" 'Temp (Air)' : "); DBG_PRINT((uint16_t)pPayload->uTempAir); DBG_PRINT(",");
+  DBG_PRINT(" 'Humidity' : "); DBG_PRINT((uint16_t)pPayload->uHumidity); DBG_PRINT(",");
+  DBG_PRINT(" 'Temp (Soil)' : "); DBG_PRINT((uint16_t)pPayload->uTempSoil); DBG_PRINT(",");
+  DBG_PRINT(" 'Moisture' : "); DBG_PRINT((uint16_t)pPayload->uMoisture); DBG_PRINT(",");
+  DBG_PRINT(" 'Reserved' : "); DBG_PRINT((uint16_t)pPayload->uReserved);
+  DBG_PRINTLN(" }");
 
   return STATUS_OK;
 }
 
 int dbg_displayStatusPayload( tStatusPayload_t* pPayload )
 {
-  Serial.print("'Part' : 'Payload (Status)', 'Content' : {");
-  Serial.print(" 'Source Node Id' : "); Serial.print((uint16_t)pPayload->uNodeId); Serial.print(",");
-  Serial.print(" 'Power' : "); Serial.print((uint16_t)pPayload->uPower); Serial.print(",");
-  Serial.print(" 'Deployment State' : "); Serial.print((uint8_t)pPayload->uDeploymentState); Serial.print(",");
-  Serial.print(" 'Status Code' : "); Serial.print((uint8_t)pPayload->uStatusCode);
-  Serial.println(" }");
+  DBG_PRINT("'Part' : 'Payload (Status)', 'Content' : {");
+  DBG_PRINT(" 'Source Node Id' : "); DBG_PRINT((uint16_t)pPayload->uNodeId); DBG_PRINT(",");
+  DBG_PRINT(" 'Power' : "); DBG_PRINT((uint16_t)pPayload->uPower); DBG_PRINT(",");
+  DBG_PRINT(" 'Deployment State' : "); DBG_PRINT((uint8_t)pPayload->uDeploymentState); DBG_PRINT(",");
+  DBG_PRINT(" 'Status Code' : "); DBG_PRINT((uint8_t)pPayload->uStatusCode);
+  DBG_PRINTLN(" }");
 
   return STATUS_OK;
 }
