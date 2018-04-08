@@ -86,8 +86,8 @@
 
 // Duration and Timeout in Milliseconds
 #define IDLE_TIMEOUT      10000
-#define LISTEN_TIMEOUT    20000
-#define TRANSMIT_TIMEOUT  2000
+#define LISTEN_TIMEOUT    5000
+#define TRANSMIT_TIMEOUT  5000
 #define LIS_TX_DURATION   30000
 #define SLEEP_TIME        20000
 
@@ -230,7 +230,8 @@ int _iBatt = 0.0;
 
 long _lastIdleTime = 0;
 long _lastListenTime = 0;
-long _LisTxStartTime = 0;
+long _lastTransmitTime = 0;
+long _lisTxStartTime = 0;
 bool _workDone = false;   /* This flag could be for data collection, retransmission, etc. */
 
 uint8_t _recvBuf[RH_RF69_MAX_MESSAGE_LEN];
@@ -396,8 +397,8 @@ int proc_hdlIdle() {
       DBG_PRINTLN("==> [TX] Failed sensor status sending.");
     }
     /* Record time before LISTEN */
-    _LisTxStartTime = millis();
     _lastListenTime = millis();
+    _lisTxStartTime = millis();
     state_set(STATE_LISTEN);
     _workDone = true;
     
@@ -489,6 +490,7 @@ int proc_hdlListen() {
   }
   
   /* Set the state machine to STATE_TRANSMIT */
+  _lastTransmitTime = millis();
   state_set(STATE_TRANSMIT);
   return STATUS_OK;
 }
@@ -509,10 +511,10 @@ int proc_hdlTransmit() {
     _tDecodedPacket.uTimestamp = _now.unixtime();
     comm_writePacket(_sendBuf, &_tDecodedPacket);
   
-    while(millis() - _LisTxStartTime <= TRANSMIT_TIMEOUT){
+    while(millis() - _lastTransmitTime <= TRANSMIT_TIMEOUT){
       if(lora_send((char*)_sendBuf, sizeof(_sendBuf)) == STATUS_OK){
-        DBG_PRINTLN("==> [TX] Sent sensor data to aggregator node "); 
-        DBG_PRINT(DEST_ADDRESS);
+        DBG_PRINT("==> [TX] Sent sensor data to aggregator node "); 
+        DBG_PRINTLN(DEST_ADDRESS);
         break;
       }
       else{
@@ -521,7 +523,7 @@ int proc_hdlTransmit() {
     }
   }
   /* Start listening again until listening duration is exhausted */
-  if (millis() - _LisTxStartTime <= LIS_TX_DURATION) {
+  if (millis() - _lisTxStartTime <= LIS_TX_DURATION) {
     _lastListenTime = millis();
     state_set(STATE_LISTEN);
     return STATUS_OK;
