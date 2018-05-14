@@ -6,13 +6,11 @@
 #
 import logging
 import dryad.sys_info as sys_info
-import dryad.ble_utils as ble_utils
 
 from time import time
 from queue import Queue
 from threading import Event, Timer, Lock, Thread
 from dryad.aggregator_node.collect_thread import CollectThread
-from dryad.database import DryadDatabase
 from dryad.aggregator_node.network import BaseAggregatorNodeNetwork
 from dryad.external_switches import ExternalSwitch
 
@@ -40,7 +38,6 @@ NODE_STATE_STR = [
     "TERMINATING",
     "INACTIVE",
     "IDLE",
-    "SCANNING",
     "GATHERING",
     "SAVING"
 ]
@@ -128,7 +125,7 @@ class AggregatorNode(BaseAggregatorNodeNetwork):
         # Reload aggregator node parameters
         self.reload_system_params()
 
-        # Initialize netowrk records as needed
+        # Initialize network records as needed
         self.init_network_records()
 
         # Reload network information
@@ -243,11 +240,6 @@ class AggregatorNode(BaseAggregatorNodeNetwork):
     def update_network(self, args=None):
         self.logger.info("[TASK] Updating network")
         self.set_state(STATE_SCANNING)
-
-        # TODO
-        self.logger.info("Scanning network...")
-        self.scan_le_nodes()
-        self.logger.info("Network scan finished.")
 
         self.set_state(STATE_IDLE)
 

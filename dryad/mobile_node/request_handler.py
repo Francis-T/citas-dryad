@@ -15,8 +15,6 @@ from time import time, ctime
 
 from utils.transform import DataTransformation
 from dryad.database import DryadDatabase
-from dryad.node_state import NodeState
-from dryad.models import NodeDevice
 from collections import Iterable
 
 CLASS_SENSOR = "SENSOR"
@@ -26,28 +24,29 @@ TYPE_BLUNO = "BLUNO"
 
 SYS_CMD_UPTIME = 'uptime | cut -d"," -f1'
 
+
 class RequestHandler():
     def __init__(self, node):
         self.request_handler_tbl = [
-            { "req_hdr" : "QSTAT", "function" : self.handle_req_state },
-            { "req_hdr" : "QTSET", "function" : self.handle_req_dtime_set },
-            { "req_hdr" : "QACTV", "function" : self.handle_req_activate },
-            { "req_hdr" : "QDEAC", "function" : self.handle_req_deactivate },
-            { "req_hdr" : "QASCP", "function" : self.handle_req_add_collection_params },
-            { "req_hdr" : "QCUPD", "function" : self.handle_req_update_cache },
-            { "req_hdr" : "QNLST", "function" : self.handle_req_list_sensors },
-            { "req_hdr" : "QQRSN", "function" : self.handle_req_setup_sensor },
-            { "req_hdr" : "QSUPD", "function" : self.handle_req_update_sensor },
-            { "req_hdr" : "QDLTE", "function" : self.handle_req_remove_sensor },
-            { "req_hdr" : "QHALT", "function" : self.handle_req_halt },
-            { "req_hdr" : "QRELD", "function" : self.handle_req_reload },
-            { "req_hdr" : "QREBT", "function" : self.handle_req_reboot },
-            { "req_hdr" : "QPWDN", "function" : self.handle_req_shutdown },
-            { "req_hdr" : "QEXTN", "function" : self.handle_req_extend_idle },
-            { "req_hdr" : "QSETP", "function" : self.handle_req_set_param },
-            { "req_hdr" : "QPARL", "function" : self.handle_req_param_list },
-            { "req_hdr" : "QINFO", "function" : self.handle_req_info_list },
-            { "req_hdr" : "QDATA", "function" : self.handle_req_download },
+            {"req_hdr": "QSTAT", "function": self.handle_req_state},
+            {"req_hdr": "QTSET", "function": self.handle_req_dtime_set},
+            {"req_hdr": "QACTV", "function": self.handle_req_activate},
+            {"req_hdr": "QDEAC", "function": self.handle_req_deactivate},
+            {"req_hdr": "QASCP", "function": self.handle_req_add_collection_params},
+            {"req_hdr": "QCUPD", "function": self.handle_req_update_cache},
+            {"req_hdr": "QNLST", "function": self.handle_req_list_sensors},
+            {"req_hdr": "QQRSN", "function": self.handle_req_setup_sensor},
+            {"req_hdr": "QSUPD", "function": self.handle_req_update_sensor},
+            {"req_hdr": "QDLTE", "function": self.handle_req_remove_sensor},
+            {"req_hdr": "QHALT", "function": self.handle_req_halt},
+            {"req_hdr": "QRELD", "function": self.handle_req_reload},
+            {"req_hdr": "QREBT", "function": self.handle_req_reboot},
+            {"req_hdr": "QPWDN", "function": self.handle_req_shutdown},
+            {"req_hdr": "QEXTN", "function": self.handle_req_extend_idle},
+            {"req_hdr": "QSETP", "function": self.handle_req_set_param},
+            {"req_hdr": "QPARL", "function": self.handle_req_param_list},
+            {"req_hdr": "QINFO", "function": self.handle_req_info_list},
+            {"req_hdr": "QDATA", "function": self.handle_req_download},
         ]
 
         self.task_node = node
@@ -61,9 +60,8 @@ class RequestHandler():
         db = DryadDatabase()
         node_matches = db.get_nodes(node_class='SELF')
         data = db.get_data()
-        
+
         if len(node_matches) <= 0:
-            db.close_session()
             self.logger.error("Failed to load data for 'SELF'")
 
             return link.send_response("RSTAT:FAIL\r\n")
@@ -76,22 +74,22 @@ class RequestHandler():
         node_data = node_matches[0]
 
         # Format the string to return
-        state =  "'name':'{}','state':'{}','batt':{},'version':'{}',"
+        state = "'name':'{}','state':'{}','batt':{},'version':'{}',"
         state += "'lat':{},'lon':{},'sys_time':'{}','uptime':'{}',"
         state += "'next_sleep_time':'{}','next_collect_time':'{}',"
         state += "'size':{}"
-        state = state.format( node_data.name,
-                              self.task_node.get_state_str(),
-                              -99.0, 
-                              self.version, 
-                              node_data.lat, 
-                              node_data.lon,
-                              ctime(),
-                              self_uptime,
-                              ctime(self.task_node.get_idle_out_time()),
-                              ctime(self.task_node.get_collect_time()),
-                              len(data))
-        
+        state = state.format(node_data.name,
+                             self.task_node.get_state_str(),
+                             -99.0,
+                             self.version,
+                             node_data.lat,
+                             node_data.lon,
+                             ctime(),
+                             self_uptime,
+                             ctime(self.task_node.get_idle_out_time()),
+                             ctime(self.task_node.get_collect_time()),
+                             len(data))
+
         return link.send_response("RSTAT:{" + state + "};\r\n")
 
     def handle_req_dtime_set(self, link, content):
@@ -110,20 +108,25 @@ class RequestHandler():
                     if "time" in arg:
                         upd_format = "+%T"
 
-                    date_update_flag = subprocess.call(["sudo", "date", upd_format, '-s', val]) 
-                    hwclock_update_flag = subprocess.call(["sudo", "hwclock", "-w"])
-            
+                    date_update_flag = subprocess.call(
+                        ["sudo", "date", upd_format, '-s', val])
+                    hwclock_update_flag = subprocess.call(
+                        ["sudo", "hwclock", "-w"])
+
                     # check if updating is success
                     if date_update_flag != 0 or hwclock_update_flag != 0:
-                        self.logger.error("Failed to update time with request: {}".format(content))
+                        self.logger.error(
+                            "Failed to update time with request: {}".format(content))
                         return link.send_response("QTSET:FAIL;\r\n")
 
-                    updated_datetime = subprocess.check_output(["sudo", "hwclock"]) 
-                    self.logger.info("Datetime updated to {}".format(updated_datetime))
+                    updated_datetime = subprocess.check_output(
+                        ["sudo", "hwclock"])
+                    self.logger.info(
+                        "Datetime updated to {}".format(updated_datetime))
                     return link.send_response("QTSET:OK;\r\n")
 
         return link.send_response("QTSET:FAIL;\r\n")
- 
+
     def handle_req_param_list(self, link, content):
         params = None
 
@@ -159,11 +162,11 @@ class RequestHandler():
     def handle_req_deactivate(self, link, content):
         # TODO Add deactivation task to task node
         self.task_node.add_task("DEACTIVATE")
-       
+
         return link.send_response("RDEAC:OK;\r\n")
 
     def handle_req_add_collection_params(self, link, content):
-        # remove trailing ";" 
+        # remove trailing ";"
         content = content.strip(';')
 
         params_args = content.split(',')
@@ -173,39 +176,36 @@ class RequestHandler():
             for arg in params_args:
                 param_key = arg.split('=')[0].strip()
                 param_val = arg.split('=')[1].strip()
-       
+
                 sys_info.set_param(param_key, param_val)
 
         # TODO Trigger parameter reload on the task node
         self.task_node.add_task("RELOAD_PARAMS")
-        
+
         return link.send_response("RASCP:OK;\r\n")
 
     def handle_req_update_cache(self, link, content):
         params = {
-            "name"      :   None, 
-            "lat"       :   None, 
-            "lon"       :   None, 
-            "site_name" :   None
+            "name":   None,
+            "lat":   None,
+            "lon":   None,
+            "site_name":   None
         }
 
-        # remove trailing ";" 
+        # remove trailing ";"
         content = content.strip(';')
 
         update_args = content.split(',')
-        
-        if len(update_args) > 0:
-            for arg in update_args:
-                if "=" in arg:
-                    param = arg.split("=")[0]
-                    val = arg.split("=")[1]
 
-                    if param in params.keys():
-                        if param == "lat" or param == "lon":
-                            val = float(val)
-                            params[param] = val
-                        else:
-                            params[param] = val.strip("'").strip('"')
+        # Assigning parameters and their values basing from content
+        for arg in update_args:
+            if "=" in arg:
+                param, val = arg.split("=")
+                val = val.strip("'").strip('"')
+                if param in params.keys():
+                    if param == "lat" or param == "lon":
+                        val = float(val)
+                    params[param] = val
 
         db = DryadDatabase()
         node_matches = db.get_nodes(node_class='SELF')
@@ -219,11 +219,11 @@ class RequestHandler():
         node_data = node_matches[0]
 
         # Update cache node details in the DB
-        result = db.insert_or_update_node( name = node_data.name,
-                                           node_class = node_data.node_class,
-                                           site_name = params['site_name'],
-                                           lat = params['lat'],
-                                           lon = params['lon'] )
+        result = db.insert_or_update_node(name=node_data.name,
+                                          node_class=node_data.node_class,
+                                          site_name=params['site_name'],
+                                          lat=params['lat'],
+                                          lon=params['lon'])
 
         db.close_session()
 
@@ -246,169 +246,113 @@ class RequestHandler():
 
         snode_list = []
         for node in node_matches:
-            pf_addr = "????"
-            bl_addr = "????"
-            pf_batt = -99.0
-            bl_batt = -99.0
 
-            # Get the matching devices sharing the node's name
-            device_matches = db.get_devices(name=node.name)
-            if device_matches == None:
-                self.logger.warn("Node does not have any associated devices: {}"
-                                    .format(node.name))
-                continue
-
-            if len(device_matches) <= 0:
-                self.logger.warn("Node does not have any associated devices: {}"
-                                    .format(node.name))
-                continue
-
-            # For each matching device, extract the parrot fp address and the
-            #   bluno address and then store them in separate variables
-            for device in device_matches:
-                device_type = str(device.device_type.name)
-                if device_type == 'BLUNO':
-                    bl_addr = device.address
-
-                elif device_type == "PARROT":
-                    pf_addr = device.address
-                    pf_batt = device.power
-
-            snode = "'name':'{}', 'state':'{}',"
+            snode = "'class':'{}', name':'{}', 'address':'{}', 'state':'{}',"
             snode += "'site_name':'{}','lat':'{}', 'lon':'{}',"
-            snode += "'pf_addr':'{}', 'bl_addr':'{}', 'pf_batt':'{}',"
-            snode += "'bl_batt':'{}', 'pf_comms':'{}', 'bl_comms':'{}'"
+            snode += "'node_comms':'{}', 'power':'{}'"
 
-            snode = snode.format( node.name,
-                                  self.task_node.get_state_str(),
-                                  node.site_name,
-                                  node.lat,
-                                  node.lon,
-                                  pf_addr,
-                                  bl_addr,
-                                  pf_batt,
-                                  -99.0,
-                                  ctime(0.0),
-                                  ctime(0.0) )
+            snode = snode.format(
+                node.node_class,
+                node.name,
+                node.address,
+                self.task_node.get_state_str(),
+                node.site_name,
+                node.lat,
+                node.lon,
+                ctime(0.0),
+                node.power)
 
-            snode_list.append( "{" + snode + "}" )
-        
+            snode_list.append("{" + snode + "}")
+
         # Build the sensor node list string
         snodes_all = ",".join(snode_list)
 
         # Build the final string
         sensors += snodes_all
         sensors += "]}"
-   
-        # print(sensors)
 
         db.close_session()
-         
+
         return link.send_response("RNLST:" + sensors + ";\r\n")
-   
+
     def handle_req_setup_sensor(self, link, content):
         params = {
-            "name"          : None, 
-            "site_name"     : None, 
-            "pf_addr"       : None, 
-            "bl_addr"       : None,
-            "state"         : None,
-            "lat"           : None,
-            "lon"           : None, 
-            "updated"       : None,
+            "name": None,
+            "site_name": None,
+            "address": None
+            "state": None,
+            "lat": None,
+            "lon": None,
+            "updated": None,
         }
 
-        # remove trailing ";" 
-        if ";" in content:
-            content = content[:-1]
+        # remove trailing ";"
+        content = content.strip(';')
 
         update_args = content.split(',')
-        
-        # TODO WTF is this magickery???
-        if len(update_args) > 0:
-            for arg in update_args:
-                if "=" in arg:
-                    param = arg.split("=")[0]
-                    val = arg.split("=")[1]
 
-                    if param in params.keys():
-                        if param == "lat" or param == "lon":
-                            val = float(val)
-                            params[param] = val
-                        else:
-                            params[param] = val.strip("'").strip('"')
+        # Assigning parameters and their values basing from content
+        for arg in update_args:
+            if "=" in arg:
+                param, val = arg.split("=")
+                val = val.strip("'").strip('"')
+                if param in params.keys():
+                    if param == "lat" or param == "lon":
+                        val = float(val)
+                    params[param] = val
 
         db = DryadDatabase()
-        dt = DataTransformation()
-        bl_addr = dt.conv_mac(params["bl_addr"].upper())
-        pf_addr = dt.conv_mac(params["pf_addr"].upper())
 
-        result = db.insert_or_update_node( name         = params['name'],
-                                           node_class   = CLASS_SENSOR,
-                                           site_name    = params['site_name'],
-                                           lat          = params['lat'],
-                                           lon          = params['lon'] )
+        result = db.insert_or_update_node(name=params['name'],
+                                          address=params['address'],
+                                          node_class=CLASS_SENSOR,
+                                          site_name=params['site_name'],
+                                          lat=params['lat'],
+                                          lon=params['lon'])
         if result == False:
             self.logger.error("Failed to add node")
             link.send_response("RQRSN:FAIL;\r\n")
             db.close_session()
             return False
 
-        result = db.insert_or_update_device( address        = bl_addr,
-                                             node_id        = params['name'],
-                                             device_type    = TYPE_BLUNO )
-        if result == False:
-            self.logger.error("Failed to add node device")
-            link.send_response("RQRSN:FAIL;\r\n")
-            db.close_session()
-            return False
-
-        result = db.insert_or_update_device( address        = pf_addr,
-                                             node_id        = params['name'],
-                                             device_type    = TYPE_PARROT )
-        if result == False:
-            self.logger.error("Failed to add node device")
-            link.send_response("RQRSN:FAIL;\r\n")
-            db.close_session()
-            return False
-        
         return link.send_response("RQRSN:OK;\r\n")
 
     def handle_req_update_sensor(self, link, content):
         params = {
-            "name"        : None, 
-            "site_name"    : None, 
-            "state"        : None,
-            "lat"       : None,
-            "lon"       : None, 
+            "name": None,
+            "address": None,
+            "node_class": None,
+            "site_name": None,
+            "power": None,
+            "lat": None,
+            "lon": None,
         }
 
-        # remove trailing ";" 
+        # remove trailing ";"
         if ";" in content:
             content = content[:-1]
 
         update_args = content.split(',')
-        
-        if len(update_args) > 0:
-            for arg in update_args:
-                if "=" in arg:
-                    param = arg.split("=")[0]
-                    val = arg.split("=")[1]
 
-                    if param in params.keys():
-                        if param == "lat" or param == "lon":
-                            val = float(val)
-                            params[param] = val
-                        else:
-                            params[param] = val.strip("'").strip('"')
+        # Assigning parameters and their values basing from content
+        for arg in update_args:
+            if "=" in arg:
+                param, val = arg.split("=")
+                val = val.strip("'").strip('"')
+                if param in params.keys():
+                    if param == "lat" or param == "lon":
+                        val = float(val)
+                    params[param] = val
 
         db = DryadDatabase()
         dt = DataTransformation()
-        result = db.insert_or_update_node( name         = params['name'],
-                                           node_class   = CLASS_SENSOR,
-                                           site_name    = params['site_name'],
-                                           lat          = params['lat'],
-                                           lon          = params['lon'] )
+        result = db.insert_or_update_node(name=params['name'],
+                                          address=params['address'],
+                                          node_class=params['node_class'],
+                                          site_name=params['site_name'],
+                                          power=params['power'],
+                                          lat=params['lat'],
+                                          lon=params['lon'])
         if result == False:
             self.logger.error("Failed to add node")
             link.send_response("RSUPD:FAIL;\r\n")
@@ -421,34 +365,24 @@ class RequestHandler():
 
     def handle_req_remove_sensor(self, link, content):
         params = {
-            "rpi_name"    : None, 
-            "sn_name"   : None, 
+            "rpi_name": None,
+            "sn_name": None,
         }
-        
+
         content = content.strip(";")
         remove_args = content.split(',')
-        
-        if len(remove_args) > 0:
-            for arg in remove_args:
-                if "=" in arg:
-                    param = arg.split("=")[0]
-                    val = arg.split("=")[1]
 
-                    if param in params.keys():
-                        if param == "lat" or param == "lon":
-                            val = float(val)
-                            params[param] = val
-                        else:
-                            params[param] = val.strip("'").strip('"')
-       
+        # Assigning parameters and their values basing from content
+        for arg in update_args:
+            if "=" in arg:
+                param, val = arg.split("=")
+                val = val.strip("'").strip('"')
+                if param in params.keys():
+                    if param == "lat" or param == "lon":
+                        val = float(val)
+                    params[param] = val
+
         db = DryadDatabase()
-        result = db.delete_device(params["sn_name"])
-        if result == False:
-            self.logger.error("Failed to remove device")
-            link.send_response("RDLTE:FAIL;\r\n")
-            db.close_session()
-            return False
-
         result = db.delete_node(params["sn_name"])
         if result == False:
             self.logger.error("Failed to remove node")
@@ -521,6 +455,7 @@ class RequestHandler():
                     offset = int(arg.split('=')[1])
 
         db = DryadDatabase()
+        ## TODO Filter data either status or sensor readings
         matched_data = db.get_data(limit=limit,
                                    offset=offset,
                                    start_id=start_id,
@@ -534,19 +469,12 @@ class RequestHandler():
             # TODO Format it here
             data_block['rec_id'] = reading.id
             data_block['timestamp'] = reading.end_time
-            data_block['sampling_site'] = reading.site_name # TODO
-            data_block['data'] = json.loads(reading.content.replace("'",'"'))
-            data_block['origin'] = { 'name' : reading.name, 
-                                     'lat'  : reading.lat,
-                                     'lon'  : reading.lon,
-                                     'addr' : "---" }
-
-
-            if 'ph' not in data_block['data']:
-                data_block['data']['ph'] = None
-
-            if 'bl_batt' not in data_block['data']:
-                data_block['data']['bl_batt'] = None
+            data_block['sampling_site'] = reading.site_name
+            data_block['data'] = json.loads(reading.content.replace("'", '"'))
+            data_block['origin'] = {'name': reading.name,
+                                    'lat': reading.lat,
+                                    'lon': reading.lon,
+                                    'addr': reading.address}
 
             data.append(data_block)
 
@@ -575,4 +503,3 @@ class RequestHandler():
             self.logger.error("Failed to handler {} request".format(req_hdr))
 
         return result
-

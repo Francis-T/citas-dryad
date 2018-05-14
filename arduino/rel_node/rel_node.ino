@@ -954,41 +954,43 @@ int comm_sendStatusPacket(){
 #ifdef DEBUG_MODE
 int dbg_displayPacketHeader( tPacket_t* pPacket )
 {
-    DBG_PRINTLN("Header:");
-    DBG_PRINT("    Type: "); DBG_PRINTLN((uint8_t)pPacket->uContentType);
-    DBG_PRINT("    Len: "); DBG_PRINTLN((uint8_t)pPacket->uContentLen);
-    DBG_PRINT("    MajVer: "); DBG_PRINTLN((uint8_t)pPacket->uMajVer); 
-    DBG_PRINT("    MinVer: "); DBG_PRINTLN((uint8_t)pPacket->uMinVer);
-    DBG_PRINT("    Timestamp: "); DBG_PRINTLN((unsigned long)pPacket->uTimestamp);
-
-    return STATUS_OK;
+  DBG_PRINT("{'Part' : 'Header', 'Content' : {");
+  DBG_PRINT(" 'Type' : "); DBG_PRINT((uint8_t)pPacket->uContentType); DBG_PRINT(",");
+  DBG_PRINT(" 'Len' : "); DBG_PRINT((uint8_t)pPacket->uContentLen); DBG_PRINT(",");
+  DBG_PRINT(" 'MajVer' : "); DBG_PRINT((uint8_t)pPacket->uMajVer); DBG_PRINT(",");
+  DBG_PRINT(" 'MinVer' : "); DBG_PRINT((uint8_t)pPacket->uMinVer); DBG_PRINT(",");
+  DBG_PRINT(" 'Timestamp' : "); DBG_PRINT((unsigned long)pPacket->uTimestamp);
+  DBG_PRINTLN(" }}");
+  return STATUS_OK;
 }
 int dbg_displayDataPayload( tDataPayload_t* pPayload )
 {
-    DBG_PRINTLN("Payload (Data):");
-    DBG_PRINT("    Source Node Id: "); DBG_PRINTLN((uint16_t)pPayload->uNodeId);
-    DBG_PRINT("    Dest Node Id: "); DBG_PRINTLN((uint16_t)pPayload->uRelayId);
-    DBG_PRINT("    pH: "); DBG_PRINTLN((uint16_t)pPayload->uPH);
-    DBG_PRINT("    Conductivity: "); DBG_PRINTLN((uint16_t)pPayload->uConductivity);
-    DBG_PRINT("    Light: "); DBG_PRINTLN((uint16_t)pPayload->uLight);
-    DBG_PRINT("    Temp (Air): "); DBG_PRINTLN((uint16_t)pPayload->uTempAir);
-    DBG_PRINT("    Humidity: "); DBG_PRINTLN((uint16_t)pPayload->uHumidity);
-    DBG_PRINT("    Temp (Soil): "); DBG_PRINTLN((uint16_t)pPayload->uTempSoil);
-    DBG_PRINT("    Moisture: "); DBG_PRINTLN((uint16_t)pPayload->uMoisture);
-    DBG_PRINT("    Reserved: "); DBG_PRINTLN((uint16_t)pPayload->uReserved);
+  DBG_PRINT("{'Part' : 'Data', 'Content' : {");
+  DBG_PRINT(" 'Source Node Id' : "); DBG_PRINT((uint16_t)pPayload->uNodeId); DBG_PRINT(",");
+  DBG_PRINT(" 'Dest Node Id' : "); DBG_PRINT((uint16_t)pPayload->uRelayId); DBG_PRINT(",");
+  DBG_PRINT(" 'pH' : "); DBG_PRINT((uint16_t)pPayload->uPH); DBG_PRINT(",");
+  DBG_PRINT(" 'Conductivity' : "); DBG_PRINT((uint16_t)pPayload->uConductivity); DBG_PRINT(",");
+  DBG_PRINT(" 'Light' : "); DBG_PRINT((uint16_t)pPayload->uLight); DBG_PRINT(",");
+  DBG_PRINT(" 'Temp (Air)' : "); DBG_PRINT((uint16_t)pPayload->uTempAir); DBG_PRINT(",");
+  DBG_PRINT(" 'Humidity' : "); DBG_PRINT((uint16_t)pPayload->uHumidity); DBG_PRINT(",");
+  DBG_PRINT(" 'Temp (Soil)' : "); DBG_PRINT((uint16_t)pPayload->uTempSoil); DBG_PRINT(",");
+  DBG_PRINT(" 'Moisture' : "); DBG_PRINT((uint16_t)pPayload->uMoisture); DBG_PRINT(",");
+  DBG_PRINT(" 'Reserved' : "); DBG_PRINT((uint16_t)pPayload->uReserved);
+  DBG_PRINTLN(" }}");
 
-    return STATUS_OK;
+  return STATUS_OK;
 }
 
 int dbg_displayStatusPayload( tStatusPayload_t* pPayload )
 {
-    DBG_PRINT("Payload (Status):");
-    DBG_PRINT("    Source Node Id: "); DBG_PRINTLN((uint16_t)pPayload->uNodeId);
-    DBG_PRINT("    Power: "); DBG_PRINTLN((uint16_t)pPayload->uPower);
-    DBG_PRINT("    Deployment State: "); DBG_PRINTLN((uint8_t)pPayload->uDeploymentState);
-    DBG_PRINT("    Status Code: "); DBG_PRINTLN((uint8_t)pPayload->uStatusCode);
+  DBG_PRINT("{'Part' : 'Status', 'Content' : {");
+  DBG_PRINT(" 'Source Node Id' : "); DBG_PRINT((uint16_t)pPayload->uNodeId); DBG_PRINT(",");
+  DBG_PRINT(" 'Power' : "); DBG_PRINT((uint16_t)pPayload->uPower); DBG_PRINT(",");
+  DBG_PRINT(" 'Deployment State' : "); DBG_PRINT((uint8_t)pPayload->uDeploymentState); DBG_PRINT(",");
+  DBG_PRINT(" 'Status Code' : "); DBG_PRINT((uint8_t)pPayload->uStatusCode);
+  DBG_PRINTLN(" }}");
 
-    return STATUS_OK;
+  return STATUS_OK;
 }
 
 #endif

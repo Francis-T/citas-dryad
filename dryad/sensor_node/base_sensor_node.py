@@ -12,8 +12,6 @@ from dryad.database import DryadDatabase
 NODE_STATES = [
     "UNKNOWN",
     "INACTIVE",
-    "CONNECTING",
-    "CONNECTED",
     "READING"
 ]
 
@@ -24,10 +22,6 @@ class BaseSensorNode(metaclass=ABCMeta):
         self.state = "UNKNOWN"
         self.state_lock = Lock()
         return
-
-    @abstractmethod
-    def connect(self):
-        pass
 
     @abstractmethod
     def start(self):
@@ -41,9 +35,6 @@ class BaseSensorNode(metaclass=ABCMeta):
     def stop(self):
         pass
 
-    @abstractmethod
-    def disconnect(self):
-        pass
 
     def get_name(self):
         return self.name

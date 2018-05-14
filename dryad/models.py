@@ -1,3 +1,10 @@
+"""
+    Name: models.py
+    Author: Jerelyn C
+    Description:
+        Database models using SQLAlchemy
+"""
+
 import enum
 
 from sqlalchemy import Integer, String, Float, Enum
@@ -6,6 +13,8 @@ from sqlalchemy.ext.declarative import declarative_base
 from sqlalchemy import Column, ForeignKey, event
 
 Base = declarative_base()
+
+# Validation functions
 
 
 def validate_int(value):
@@ -47,18 +56,15 @@ def configure_listener(class_, key, inst):
         else:
             return value
 
+# Enums for the node classes and events
+
 
 class EnumWsnClass(enum.Enum):
     AGGREGATOR = "AGGREGATOR"
+    RELAY = "RELAY"
     SENSOR = "SENSOR"
     MOBILE = "MOBILE"
     SELF = "SELF"
-    UNKNOWN = "UNKNOWN"
-
-class EnumDeviceType(enum.Enum):
-    PARROT = "PARROT"
-    BLUNO = "BLUNO"
-    RPI = "RPI"
     UNKNOWN = "UNKNOWN"
 
 
@@ -103,11 +109,13 @@ class Session(Base):
 class Node(Base):
     __tablename__ = 't_nodes'
     # id = Column(Integer, primary_key=True)
-    name = Column(String, primary_key=True)
+    address = Column(String, primary_key=True)
+    name = Column(String)
     node_class = Column(Enum(EnumWsnClass, validate_strings=True))
     site_name = Column(String)
     lat = Column(Float)
     lon = Column(Float)
+    power = Column(Float)
 
     def __repr__(self):
         return "<Node(name={}, node_class={}, site_name={}, \
@@ -115,37 +123,25 @@ class Node(Base):
                                 self.lat, self.lon)
 
 
-class NodeDevice(Base):
-    __tablename__ = 't_node_devices'
-    # id = Column(Integer, primary_key=True)
-    address = Column(String, primary_key=True)
-    node_id = Column(String, ForeignKey('t_nodes.name'))
-    device_type = Column(Enum(EnumDeviceType, validate_strings=True))
-    power = Column(Float)
-
-    node = relationship("Node")
-
-    def __repr__(self):
-        return "<NodeDevice(node_id={}, address={}, \
-        device_type={}, power={}>".format(self.node_id, self.address,
-                                          self.device_type, self.power)
-
-
 class NodeData(Base):
     __tablename__ = 't_node_data'
     id = Column(Integer, primary_key=True)
-    blk_id = Column(Integer, nullable=False)
     session_id = Column(Integer, ForeignKey('t_sessions.id'))
-    source_id = Column(String)
+    source_id = Column(Integer, ForeignKey('t_nodes.address'))
+    dest_id = Column(Integer, ForeignKey('t_nodes.address'))
+    part = Column(String)
+    length = Column(Integer)
     content = Column(String)
     timestamp = Column(Integer)
 
     session = relationship("Session")
+    node = relationship("Node")
 
     def __repr__(self):
-        return "<NodeData(id={}, session_id={}, blk_id={}, source_id={}, content={}, \
-        timestamp={}>".format(self.id, self.session_id, self.blk_id,
-                              self.source_id, self.content, self.timestamp)
+        return "<NodeData(id={}, session_id={}, source_id={}, part={}, \
+        content={}, timestamp={}>".format(self.id, self.session_id, self.source_id,
+                                          self.part, self.content, self.timestamp)
+
 
 class SessionData(Base):
     __tablename__ = 't_session_data'
@@ -162,6 +158,7 @@ class SessionData(Base):
         timestamp={}>".format(self.id, self.session_id, self.source_id,
                               self.content, self.timestamp)
 
+
 class NodeEvent(Base):
     __tablename__ = 't_node_events'
     id = Column(Integer, primary_key=True)
@@ -176,11 +173,11 @@ class NodeEvent(Base):
         timestamp={}>".format(self.id, self.node_id, self.event_type,
                               self.timestamp)
 
+
 class Exception(Base):
     __tablename__ = 't_exception'
     id = Column(Integer, primary_key=True)
     message = Column(String)
 
     def __repr__(self):
-        return "<Exception(id={}, message={}>".format(self.id, self.message) 
-    
+        return "<Exception(id={}, message={}>".format(self.id, self.message)

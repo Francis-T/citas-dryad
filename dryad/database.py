@@ -1,3 +1,10 @@
+"""
+    Name: database.py
+    Author: Jerelyn C
+    Description:
+        Source code for database ORM operations
+"""
+
 import logging
 import time
 
@@ -6,7 +13,7 @@ from sqlalchemy import create_engine, event, and_
 from sqlalchemy.orm import sessionmaker
 
 from dryad.models import Base, NodeData, NodeEvent, SystemInfo
-from dryad.models import Node, SystemParam, NodeDevice, Session
+from dryad.models import Node, SystemParam, Session
 from dryad.models import SessionData
 
 
@@ -80,7 +87,7 @@ class DryadDatabase:
                 return result.all()
 
             # Otherwise, encapsulate it in a Python list
-            return [ result ]
+            return [result]
 
         print("Get: Non-existing {}.".format(field))
         return False
@@ -129,31 +136,25 @@ class DryadDatabase:
     ##********************************##
     ##              Node              ##
     ##******************************* ##
-    def insert_or_update_node(self, name, node_class, site_name=None, lat=None, lon=None):
-        node_lat  = lat
-        node_lon  = lon
+    def insert_or_update_node(self, name, address, node_class, site_name="???", power=-99, lat=0, lon=0):
+        node_lat = lat
+        node_lon = lon
         node_site = site_name
 
         matched_nodes = self.get_nodes(name)
         if matched_nodes != False:
-            if len(matched_nodes) <= 0:
-                node_lat = 0.0
-                node_lon = 0.0
-                site_name = "????"
+            # Attempt to reload the old parameters if ever there are none supplied
+            if lat == 0:
+                node_lat = matched_nodes[0].lat
 
-            else:
-                # Attempt to reload the old parameters if ever there are none supplied
-                if lat == None:
-                    node_lat  = matched_nodes[0].lat
+            if lon == 0:
+                node_lon = matched_nodes[0].lon
 
-                if lon == None:
-                    node_lon  = matched_nodes[0].lon
+            if site_name == "???":
+                node_site = matched_nodes[0].site_name
 
-                if site_name == None:
-                    node_site = matched_nodes[0].site_name
-            
-        node = Node(name=name, node_class=node_class, 
-                    site_name=node_site, lat=node_lat, lon=node_lon)
+        node = Node(name=name, address=address, node_class=node_class,
+                    site_name=node_site, power=power, lat=node_lat, lon=node_lon)
         return self.insert_or_update(node)
 
     def get_nodes(self, name=None, node_class=None):
@@ -184,45 +185,10 @@ class DryadDatabase:
         return self.delete(target_node)
 
     ##********************************##
-    ##            Device              ##
-    ##******************************* ##
-    def insert_or_update_device(self, address, node_id, device_type, power=-99.0):
-        node_device = NodeDevice(address=address, node_id=node_id,
-                                 device_type=device_type, power=power)
-        return self.insert_or_update(node_device)
-
-    def get_devices(self, name=None, address=None, device_type=None):
-        target = self.db_session.query(NodeDevice)
-
-        if address is not None:
-            target = target.filter_by(address=address).first()
-
-        if device_type is not None:
-            target = target.filter_by(device_type=device_type).all()
-        
-        if name is not None:
-            target = target.filter_by(node_id=name).all()
-
-        return self.get(address, target)
-
-    def delete_device(self, name):
-        matched_devices = self.get_devices(name=name)
-        if len(matched_devices) <= 0:
-            return False
-
-        result = True
-        for target_device in matched_devices:
-            if self.delete(target_device) == False:
-                result = False
-
-        return result
-
-    ##********************************##
     ##           Session              ##
     ##******************************* ##
     def start_session(self):
         session = Session(start_time=str(int(time.time())), end_time=-1)
-        print(session)
         return self.add(session)
 
     def get_current_session(self):
@@ -264,7 +230,8 @@ class DryadDatabase:
     def get_data(self, id=None, session_id=None, limit=None, offset=None,
                  start_id=0, end_id=100000000000000):
 
-        result = self.db_session.query(NodeData.id, Node.name,
+        result = self.db_session.query(NodeData.id, Node.name, NodeData.part,
+                                       NodeData.source_id, NodeData.dest_id, 
                                        Session.end_time, NodeData.content,
                                        Node.lat, Node.lon, Node.site_name)\
             .join(Session).join(Node, NodeData.source_id == Node.name).filter(
@@ -279,28 +246,26 @@ class DryadDatabase:
 
         return self.get("data", result)
 
-    def add_data(self, blk_id, session_id, source_id, content, timestamp):
-        data = NodeData(blk_id=blk_id,
-                        session_id=session_id,
-                        source_id=source_id,
+    def add_data(self, session_id, source_id, dest_id, part, content, length, timestamp):
+        data = NodeData(session_id=session_id, source_id=source_id,
+                        dest_id=dest_id, part=part, length=length,
                         content=content, timestamp=timestamp)
         return self.add(data)
 
     ##********************************##
     ##           Session Data         ##
     ##******************************* ##
-    def get_session_data(self, id=None, session_id=None, limit=None, 
+    def get_session_data(self, id=None, session_id=None, limit=None,
                          offset=None, start_id=0, end_id=100000000000000):
-    
-        
-        result = self.db_session.query(SessionData.id, 
-                                       SessionData.session_id, 
-                                       SessionData.source_id, 
+
+        result = self.db_session.query(SessionData.id,
+                                       SessionData.session_id,
+                                       SessionData.source_id,
                                        SessionData.content,
                                        SessionData.timestamp)\
-                                .filter(and_(SessionData.id >= start_id, 
-                                             SessionData.id <= end_id))\
-                                .order_by(SessionData.source_id, SessionData.id)
+            .filter(and_(SessionData.id >= start_id,
+                         SessionData.id <= end_id))\
+            .order_by(SessionData.source_id, SessionData.id)
 
         if offset is not None:
             result = result[offset:]
@@ -309,9 +274,9 @@ class DryadDatabase:
         return self.get("data", result)
 
     def add_session_data(self, source_id, content, timestamp):
-        data = SessionData(session_id=self.get_current_session().id, 
+        data = SessionData(session_id=self.get_current_session().id,
                            source_id=source_id,
-                           content=content, 
+                           content=content,
                            timestamp=timestamp)
         return self.add(data)
 
@@ -320,7 +285,6 @@ class DryadDatabase:
         self.db_session.commit()
 
         return True
-
 
     ##********************************##
     ##             Event              ##
@@ -337,4 +301,3 @@ class DryadDatabase:
     def delete_event(self, id):
         result = self.get_event(id)
         return self.delete(result)
-

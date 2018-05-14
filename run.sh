@@ -81,7 +81,6 @@ do
         export LANG=C.UTF-8
         sudo -E /usr/bin/python3 -m flask run --host=0.0.0.0 &
     fi;
-    # fi;
 
     sudo /usr/bin/python3 main.py
     RES_CODE=$(echo $?)

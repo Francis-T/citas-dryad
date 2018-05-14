@@ -13,11 +13,9 @@ from threading import Thread
 from dryad.database import DryadDatabase
 
 class ReadThread(Thread): #, metaclass=ABCMeta):
-    def __init__(self, parent, func_read, readings, logger=None, event_done=None, event_read=None, \
+    def __init__(self, func_read, readings, logger=None, event_done=None, event_read=None, \
                  event_error=None, read_samples=0, read_time=0, read_interval=0):
         Thread.__init__(self)
-
-        self.parent = parent
 
         if logger == None:
             self.logger = logging.getLogger("main.read_thread")

@@ -21,12 +21,9 @@
 
 // RTC
 #include <Wire.h>
-#include "RTClib.h" // DS3231 RTC
-#include <RTCZero.h> // Feather internal RTC
 
 // Transmission-related libraries
 #include <SPI.h>
-#include <RH_RF69.h> // For the feather radio
 #include <RH_RF95.h> // For the LoRa 9x
 #include <RHMesh.h>
 #include <RHReliableDatagram.h>
@@ -50,28 +47,20 @@
 #define ID_AGG_NODE       92
 
 // 434 Frequency for CITAS
-#define RF69_FREQ 434.0
-#define RF95_FREQ 434.0
+#define RF95_FREQ         434.0
 
-// Define Feather and LoRa
-#define ARDUINO_SAMD_FEATHER_M0
+// Define LoRa
 #define ADAFRUIT_LORA_9X
 
 // who am i? (server address)
 #define MY_ADDRESS     ID_AGG_NODE
 
-// Pin definitions for Feather and LoRa
-#if defined(ARDUINO_SAMD_FEATHER_M0) // Feather M0 w/Radio
-#define RFM69_CS      8
-#define RFM69_INT     3
-#define RFM69_RST     4
-#define LED           13
-#endif
-
+// Pin definitions for LoRa
 #if defined(ADAFRUIT_LORA_9X) // Adafruit LoRa
-#define RFM95_CS 10
-#define RFM95_RST 9
-#define RFM95_INT 11
+#define RFM95_CS      8
+#define RFM95_RST     9
+#define RFM95_INT     3
+#define LED           13
 #endif
 
 // Status variables
@@ -159,31 +148,20 @@ int comm_sendStatusPacket();
 
 void utl_hdlInterrupt();
 
-void rtc_init();
-
-int radio_init(void);
-
 int lora_init(void);
 int lora_recv();
 
 float utl_measureBatt();
 
-/* Global Variable Declarations */
-RTCZero _radioRtc; // Create Feather / radio RTC object
-RTC_DS3231 _rtc; // Create global RTC object
-DateTime _now = NULL;
-
-RH_RF69 _rf69(RFM69_CS, RFM69_INT);
 RH_RF95 _rf95(RFM95_CS, RFM95_INT);
-RHReliableDatagram  _rf69_manager(_rf69, MY_ADDRESS);
 
 int _iPacketNum = 0;
 float _fBatt = 0.0;
 
 bool _workDone = false;   /* This flag could be for data collection, retransmission, etc. */
 
-uint8_t _recvBuf[RH_RF69_MAX_MESSAGE_LEN];
-uint8_t _sendBuf[RH_RF69_MAX_MESSAGE_LEN];
+uint8_t _recvBuf[RH_RF95_MAX_MESSAGE_LEN];
+uint8_t _sendBuf[RH_RF95_MAX_MESSAGE_LEN];
 
 bool _isDataAvailable = false; // This flag will be used as a condition for transmitting
 
@@ -203,24 +181,16 @@ void setup() {
   }
 
   // Start Serial
-  Serial.begin(115200);
+  Serial.begin(9600);
 
   // Assign LED pin mode to Output
   pinMode(LED, OUTPUT);
-
-  // Initialize RTC
-  _radioRtc.begin();
-
-  // Setup Radio
-  pinMode(RFM69_RST, OUTPUT);
-  digitalWrite(RFM69_RST, LOW);
 
   // Setup LoRa
   pinMode(RFM95_RST, OUTPUT);
   digitalWrite(RFM95_RST, HIGH);
 
-  // Call initialization for radio and lora
-  radio_init();
+  // Call initialization for lora
   lora_init();
 
   // Display addresses
@@ -295,50 +265,6 @@ int proc_hdlListen() {
 
   return STATUS_OK;
 }
-
-/******************************/
-/**   Radio Functions        **/
-/******************************/
-/**
-  @desc    Initializes radio
-  @return  an integer status
-*/
-int radio_init() {
-  DBG_PRINTLN("Feather Radio Initialization...");
-
-  /* Reset the RFM69 radio (?) */
-  digitalWrite(RFM69_RST, HIGH);
-  delay(10);
-  digitalWrite(RFM69_RST, LOW);
-  delay(10);
-
-  /* Initialize RF69 Manager */
-  if (!_rf69_manager.init()) {
-    DBG_PRINTLN("RFM69 radio init failed");
-    while (1);
-  }
-  _rf69_manager.setTimeout(2000);
-
-  DBG_PRINTLN("RFM69 radio init OK!");
-  // Defaults after init are 434.0MHz, modulation GFSK_Rb250Fd250, +13dbM (for low power module)
-  // No encryptiond
-  if (!_rf69.setFrequency(RF69_FREQ)) {
-    DBG_PRINTLN("setFrequency failed");
-  }
-
-  // If you are using a high power RF69 eg RFM69HW, you *must* set a Tx power with the
-  // ishighpowermodule flag set like this:
-  _rf69.setTxPower(20, true);  // range from 14-20 for power, 2nd arg must be true for 69HCW
-
-  // The encryption key has to be the same as the one in the server
-  uint8_t key[] = { 0x01, 0x02, 0x03, 0x04, 0x05, 0x06, 0x07, 0x08,
-                    0x01, 0x02, 0x03, 0x04, 0x05, 0x06, 0x07, 0x08
-                  };
-  _rf69.setEncryptionKey(key);
-  DBG_PRINT("RFM69 radio @");  DBG_PRINT((int)RF69_FREQ);  DBG_PRINTLN(" MHz");
-  return STATUS_OK;
-}
-
 
 /***********************/
 /**   LoRa Functions  **/
@@ -579,64 +505,23 @@ int comm_parseStatusPayload( void* pPayload, uint8_t* pRecvBuf, uint16_t uRecvLe
   return STATUS_OK;
 }
 
-int comm_setPacketHeader() {
-  memset(&_tInputPacket, 0, sizeof(_tInputPacket));
-
-  // Create the packet header
-  _tInputPacket.uContentType = TYPE_REQ_UNKNOWN;
-  _tInputPacket.uContentLen  = LEN_PAYLOAD_STATUS;
-  _tInputPacket.uMajVer      = PROTO_MAJ_VER;
-  _tInputPacket.uMinVer      = PROTO_MIN_VER;
-  _tInputPacket.uTimestamp   = _now.unixtime();
-
-  return STATUS_OK;
-
-}
-
-int comm_sendStatusPacket() {
-  // Clear and create the packet
-  memset(_sendBuf, '\0', sizeof(_sendBuf) / sizeof(_sendBuf[0]));
-  memset(&_tStatusPayload, 0, sizeof(_tStatusPayload));
-
-  if (comm_setPacketHeader() != STATUS_OK) {
-    return STATUS_FAILED;
-  }
-
-  // Create the status payload
-  _tStatusPayload.uNodeId          = MY_ADDRESS;
-  _tStatusPayload.uPower           = _fBatt;
-  _tStatusPayload.uDeploymentState = 1;
-  _tStatusPayload.uStatusCode      = 0xFF;
-
-  // Creating and writing status payload to input packet
-  comm_createStatusPayload(_tInputPacket.aPayload, &_tStatusPayload);
-  comm_writePacket(_sendBuf, &_tInputPacket);
-
-  // Send the packet
-  if (lora_send((char *)_sendBuf, sizeof(_sendBuf)) == STATUS_OK) {
-    return STATUS_OK;
-  }
-
-  return STATUS_FAILED;
-}
-
 
 #ifdef DEBUG_MODE
 int dbg_displayPacketHeader( tPacket_t* pPacket )
 {
-  DBG_PRINT("'Part' : 'Header', 'Content' : {");
+  DBG_PRINT("{'Part' : 'Header', 'Content' : {");
   DBG_PRINT(" 'Type' : "); DBG_PRINT((uint8_t)pPacket->uContentType); DBG_PRINT(",");
   DBG_PRINT(" 'Len' : "); DBG_PRINT((uint8_t)pPacket->uContentLen); DBG_PRINT(",");
   DBG_PRINT(" 'MajVer' : "); DBG_PRINT((uint8_t)pPacket->uMajVer); DBG_PRINT(",");
   DBG_PRINT(" 'MinVer' : "); DBG_PRINT((uint8_t)pPacket->uMinVer); DBG_PRINT(",");
   DBG_PRINT(" 'Timestamp' : "); DBG_PRINT((unsigned long)pPacket->uTimestamp);
-  DBG_PRINTLN(" }");
+  DBG_PRINTLN(" }}");
 
   return STATUS_OK;
 }
 int dbg_displayDataPayload( tDataPayload_t* pPayload )
 {
-  DBG_PRINT("'Part' : 'Payload (Data)', 'Content' : {");
+  DBG_PRINT("{'Part' : 'Data', 'Content' : {");
   DBG_PRINT(" 'Source Node Id' : "); DBG_PRINT((uint16_t)pPayload->uNodeId); DBG_PRINT(",");
   DBG_PRINT(" 'Dest Node Id' : "); DBG_PRINT((uint16_t)pPayload->uRelayId); DBG_PRINT(",");
   DBG_PRINT(" 'pH' : "); DBG_PRINT((uint16_t)pPayload->uPH); DBG_PRINT(",");
@@ -647,19 +532,19 @@ int dbg_displayDataPayload( tDataPayload_t* pPayload )
   DBG_PRINT(" 'Temp (Soil)' : "); DBG_PRINT((uint16_t)pPayload->uTempSoil); DBG_PRINT(",");
   DBG_PRINT(" 'Moisture' : "); DBG_PRINT((uint16_t)pPayload->uMoisture); DBG_PRINT(",");
   DBG_PRINT(" 'Reserved' : "); DBG_PRINT((uint16_t)pPayload->uReserved);
-  DBG_PRINTLN(" }");
+  DBG_PRINTLN(" }}");
 
   return STATUS_OK;
 }
 
 int dbg_displayStatusPayload( tStatusPayload_t* pPayload )
 {
-  DBG_PRINT("'Part' : 'Payload (Status)', 'Content' : {");
+  DBG_PRINT("{'Part' : 'Status', 'Content' : {");
   DBG_PRINT(" 'Source Node Id' : "); DBG_PRINT((uint16_t)pPayload->uNodeId); DBG_PRINT(",");
   DBG_PRINT(" 'Power' : "); DBG_PRINT((uint16_t)pPayload->uPower); DBG_PRINT(",");
   DBG_PRINT(" 'Deployment State' : "); DBG_PRINT((uint8_t)pPayload->uDeploymentState); DBG_PRINT(",");
   DBG_PRINT(" 'Status Code' : "); DBG_PRINT((uint8_t)pPayload->uStatusCode);
-  DBG_PRINTLN(" }");
+  DBG_PRINTLN(" }}");
 
   return STATUS_OK;
 }
