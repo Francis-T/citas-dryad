@@ -100,8 +100,8 @@
 // Duration and Timeout in Milliseconds
 #define IDLE_TIMEOUT        15000
 #define TRANSMIT_TIMEOUT    1000
-#define COL_TX_DURATION     50000
-#define SLEEP_TIME          10000
+#define COL_TX_DURATION     80000
+#define SLEEP_TIME          5000
 
 /** Note: SLEEP_TIME_SECS is separated here because
           the RTC wakeup alarm / timer needs it to

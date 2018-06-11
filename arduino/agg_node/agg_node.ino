@@ -28,7 +28,7 @@
 #include <RHMesh.h>
 #include <RHReliableDatagram.h>
 
-#define DEBUG_MSGS_ON
+//#define DEBUG_MSGS_ON
 #if defined(DEBUG_MSGS_ON)
 #define DBG_PRINT(x)    Serial.print(x)
 #define DBG_PRINTLN(x)  Serial.println(x)
@@ -230,7 +230,7 @@ int proc_hdlListen() {
   if (lora_recv() == STATUS_OK) {
     /* Parse the header to determine what type of packet it is */
     comm_parseHeader(&_tDecodedPacket, _recvBuf, LEN_HEADER);
-    dbg_displayPacketHeader( &_tDecodedPacket );
+    displayPacketHeader( &_tDecodedPacket );
 
     /* Parse the payload accordingly */
     if (_tDecodedPacket.uContentType == TYPE_REQ_STATUS) {
@@ -239,7 +239,7 @@ int proc_hdlListen() {
                               _tDecodedPacket.aPayload,
                               _tDecodedPacket.uContentLen);
 
-      dbg_displayStatusPayload( &_tStatusPayload );
+      displayStatusPayload( &_tStatusPayload );
 
       _isDataAvailable = true;
 
@@ -249,16 +249,11 @@ int proc_hdlListen() {
                             _tDecodedPacket.aPayload,
                             _tDecodedPacket.uContentLen);
 
-      dbg_displayDataPayload( &_tDataPayload );
+      displayDataPayload( &_tDataPayload );
 
       _isDataAvailable = true;
 
-    } else {
-      DBG_PRINTLN("No data yet...");
-      delay(250);
-
     }
-
   }
   delay(200); // Sanity delay
 
@@ -506,54 +501,47 @@ int comm_parseStatusPayload( void* pPayload, uint8_t* pRecvBuf, uint16_t uRecvLe
 }
 
 
-#ifdef DEBUG_MODE
-int dbg_displayPacketHeader( tPacket_t* pPacket )
+int displayPacketHeader( tPacket_t* pPacket )
 {
-  DBG_PRINT("{'Part' : 'Header', 'Content' : {");
-  DBG_PRINT(" 'Type' : "); DBG_PRINT((uint8_t)pPacket->uContentType); DBG_PRINT(",");
-  DBG_PRINT(" 'Len' : "); DBG_PRINT((uint8_t)pPacket->uContentLen); DBG_PRINT(",");
-  DBG_PRINT(" 'MajVer' : "); DBG_PRINT((uint8_t)pPacket->uMajVer); DBG_PRINT(",");
-  DBG_PRINT(" 'MinVer' : "); DBG_PRINT((uint8_t)pPacket->uMinVer); DBG_PRINT(",");
-  DBG_PRINT(" 'Timestamp' : "); DBG_PRINT((unsigned long)pPacket->uTimestamp);
-  DBG_PRINTLN(" }}");
+  Serial.print("{'Header': {");
+  Serial.print(" 'Type': "); Serial.print((uint8_t)pPacket->uContentType); Serial.print(",");
+  Serial.print(" 'Len': "); Serial.print((uint8_t)pPacket->uContentLen); Serial.print(",");
+  Serial.print(" 'MajVer': "); Serial.print((uint8_t)pPacket->uMajVer); Serial.print(",");
+  Serial.print(" 'MinVer': "); Serial.print((uint8_t)pPacket->uMinVer); Serial.print(",");
+  Serial.print(" 'Timestamp': "); Serial.print((unsigned long)pPacket->uTimestamp);
+  Serial.print(" },");
 
   return STATUS_OK;
 }
-int dbg_displayDataPayload( tDataPayload_t* pPayload )
+int displayDataPayload( tDataPayload_t* pPayload )
 {
-  DBG_PRINT("{'Part' : 'Data', 'Content' : {");
-  DBG_PRINT(" 'Source Node Id' : "); DBG_PRINT((uint16_t)pPayload->uNodeId); DBG_PRINT(",");
-  DBG_PRINT(" 'Dest Node Id' : "); DBG_PRINT((uint16_t)pPayload->uRelayId); DBG_PRINT(",");
-  DBG_PRINT(" 'pH' : "); DBG_PRINT((uint16_t)pPayload->uPH); DBG_PRINT(",");
-  DBG_PRINT(" 'Conductivity' : "); DBG_PRINT((uint16_t)pPayload->uConductivity); DBG_PRINT(",");
-  DBG_PRINT(" 'Light' : "); DBG_PRINT((uint16_t)pPayload->uLight); DBG_PRINT(",");
-  DBG_PRINT(" 'Temp (Air)' : "); DBG_PRINT((uint16_t)pPayload->uTempAir); DBG_PRINT(",");
-  DBG_PRINT(" 'Humidity' : "); DBG_PRINT((uint16_t)pPayload->uHumidity); DBG_PRINT(",");
-  DBG_PRINT(" 'Temp (Soil)' : "); DBG_PRINT((uint16_t)pPayload->uTempSoil); DBG_PRINT(",");
-  DBG_PRINT(" 'Moisture' : "); DBG_PRINT((uint16_t)pPayload->uMoisture); DBG_PRINT(",");
-  DBG_PRINT(" 'Reserved' : "); DBG_PRINT((uint16_t)pPayload->uReserved);
-  DBG_PRINTLN(" }}");
-
-  return STATUS_OK;
-}
-
-int dbg_displayStatusPayload( tStatusPayload_t* pPayload )
-{
-  DBG_PRINT("{'Part' : 'Status', 'Content' : {");
-  DBG_PRINT(" 'Source Node Id' : "); DBG_PRINT((uint16_t)pPayload->uNodeId); DBG_PRINT(",");
-  DBG_PRINT(" 'Power' : "); DBG_PRINT((uint16_t)pPayload->uPower); DBG_PRINT(",");
-  DBG_PRINT(" 'Deployment State' : "); DBG_PRINT((uint8_t)pPayload->uDeploymentState); DBG_PRINT(",");
-  DBG_PRINT(" 'Status Code' : "); DBG_PRINT((uint8_t)pPayload->uStatusCode);
-  DBG_PRINTLN(" }}");
+  Serial.print(" 'Content': {");
+  Serial.print(" 'SourceNode': "); Serial.print((uint16_t)pPayload->uNodeId); Serial.print(",");
+  Serial.print(" 'DestNode': "); Serial.print((uint16_t)pPayload->uRelayId); Serial.print(",");
+  Serial.print(" 'pH' : "); Serial.print((uint16_t)pPayload->uPH); Serial.print(",");
+  Serial.print(" 'Conductivity': "); Serial.print((uint16_t)pPayload->uConductivity); Serial.print(",");
+  Serial.print(" 'Light': "); Serial.print((uint16_t)pPayload->uLight); Serial.print(",");
+  Serial.print(" 'AirTemp': "); Serial.print((uint16_t)pPayload->uTempAir); Serial.print(",");
+  Serial.print(" 'Humidity': "); Serial.print((uint16_t)pPayload->uHumidity); Serial.print(",");
+  Serial.print(" 'SoilTemp': "); Serial.print((uint16_t)pPayload->uTempSoil); Serial.print(",");
+  Serial.print(" 'Moisture': "); Serial.print((uint16_t)pPayload->uMoisture); Serial.print(",");
+  Serial.print(" 'Reserved': "); Serial.print((uint16_t)pPayload->uReserved);
+  Serial.println(" }}");
 
   return STATUS_OK;
 }
 
-#endif
+int displayStatusPayload( tStatusPayload_t* pPayload )
+{
+  Serial.print(" 'Content': {");
+  Serial.print(" 'SourceNode': "); Serial.print((uint16_t)pPayload->uNodeId); Serial.print(",");
+  Serial.print(" 'Power': "); Serial.print((uint16_t)pPayload->uPower); Serial.print(",");
+  Serial.print(" 'Deployment State': "); Serial.print((uint8_t)pPayload->uDeploymentState); Serial.print(",");
+  Serial.print(" 'Status Code': "); Serial.print((uint8_t)pPayload->uStatusCode);
+  Serial.println(" }}");
 
-
-
-
+  return STATUS_OK;
+}
 
 
 
