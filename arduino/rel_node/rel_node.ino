@@ -88,8 +88,8 @@
 #define IDLE_TIMEOUT      10000
 #define LISTEN_TIMEOUT    5000
 #define TRANSMIT_TIMEOUT  5000
-#define LIS_TX_DURATION   30000
-#define SLEEP_TIME        20000
+#define LIS_TX_DURATION   80000
+#define SLEEP_TIME        5000 // 20s
 
 /** Note: SLEEP_TIME_SECS is separated here because
  *        the RTC wakeup alarm / timer needs it to
@@ -250,7 +250,7 @@ tDataPayload_t _tDataPayload;
  * @return  void
  */
 void setup() {
-  while (!Serial) { delay(1); }
+//  while (!Serial) { delay(1); }
 
   // Start Serial
   Serial.begin(115200);
