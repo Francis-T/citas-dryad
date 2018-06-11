@@ -119,28 +119,28 @@ class Node(Base):
 
     def __repr__(self):
         return "<Node(name={}, node_class={}, site_name={}, \
-        lat={}, lon={}>".format(self.name, self.node_class, self.site_name,
-                                self.lat, self.lon)
+        lat={}, lon={}, power={}>".format(self.name, self.node_class, self.site_name,
+                                self.lat, self.lon, self.power)
 
 
 class NodeData(Base):
     __tablename__ = 't_node_data'
     id = Column(Integer, primary_key=True)
     session_id = Column(Integer, ForeignKey('t_sessions.id'))
-    source_id = Column(Integer, ForeignKey('t_nodes.address'))
-    dest_id = Column(Integer, ForeignKey('t_nodes.address'))
+    source_id = Column(String)
+    dest_id = Column(String)
     part = Column(String)
     length = Column(Integer)
     content = Column(String)
     timestamp = Column(Integer)
 
     session = relationship("Session")
-    node = relationship("Node")
 
     def __repr__(self):
-        return "<NodeData(id={}, session_id={}, source_id={}, part={}, \
+        return "<NodeData(id={}, session_id={}, source_id={}, dest_id={}, part={}, \
         content={}, timestamp={}>".format(self.id, self.session_id, self.source_id,
-                                          self.part, self.content, self.timestamp)
+                                          self.dest_id, self.part, self.content,
+                                          self.timestamp)
 
 
 class SessionData(Base):

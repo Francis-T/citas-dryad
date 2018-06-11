@@ -1,3 +1,5 @@
+set encoding=utf-8
+
 set expandtab
 set smarttab
 set shiftwidth=4
@@ -11,3 +13,14 @@ set incsearch
 set number
 set nowrap
 syntax on
+
+call pathogen#infect()
+call pathogen#helptags()
+
+     
+autocmd StdinReadPre * let s:std_in=1
+autocmd VimEnter * if argc() == 1 && isdirectory(argv()[0]) && !exists("s:std_in") | exe 'NERDTree' argv()[0] | wincmd p | ene | endif
+autocmd bufenter * if (winnr("$") == 1 && exists("b:NERDTree") && b:NERDTree.isTabTree()) | q | endif
+
+
+let g:NERDTreeDirArrows=0yntax on

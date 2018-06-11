@@ -139,9 +139,9 @@ class AggregatorNode(BaseAggregatorNodeNetwork):
         if self.set_idle_out_timer() != RESULT_OK:
             self.logger.error("Failed to set idle out timer")
 
-        # if self.deployment_status == STATUS_DEPLOYED:
-        #     # TODO Needs refactoring
-        #     self.add_task("ACTIVATE")
+        #if self.deployment_status == STATUS_DEPLOYED:
+        #    # TODO Needs refactoring
+        #    self.add_task("ACTIVATE")
         
         ext_sw = ExternalSwitch()
         if (ext_sw.is_node_activated()):

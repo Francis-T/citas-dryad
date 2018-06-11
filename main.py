@@ -1,4 +1,3 @@
-#
 #   Dryad Main
 #   Author: Francis T
 #

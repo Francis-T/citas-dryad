@@ -1,6 +1,6 @@
 #
 #   Collect Thread Class
-#   Author: Francis T
+#   Author: Francis T and Jerelyn C
 #
 #   Thread for handling data collection operations
 #

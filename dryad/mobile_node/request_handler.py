@@ -279,7 +279,7 @@ class RequestHandler():
         params = {
             "name": None,
             "site_name": None,
-            "address": None
+            "address": None,
             "state": None,
             "lat": None,
             "lon": None,
