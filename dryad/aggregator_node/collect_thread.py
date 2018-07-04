@@ -85,83 +85,65 @@ class CollectThread(Thread):
         return
 
     def offload_data(self):
-        ## TODO Update offload data to save data with two categories: status and data payloads 
         db = DryadDatabase()
 
-        session_data = db.get_session_data()
-        self.logger.debug(session_data)
+        for dtype in range(1,3):
+            session_data = db.get_session_data(dtype=dtype)
+                
+            blk_count = 0
+            curr_session = 0
+            prev_session = 0
+            data_block = {}
 
-        blk_count = 0
-        curr_session = 0
-        prev_session = 0
+            for reading in session_data:
+                # Save the current session id
+                curr_session = reading.session_id
 
-        n_params = 13  # ideal number of parameters per data block
-        data_blocks = {}
-        offloaded_data = {}
+                # Extract the data type and value from the 'content' string
+                data_key, data_val = reading.content.split(":")
 
-        for reading in session_data:
-            # Save the current session id
-            curr_session = reading.session_id
+                # If this particular data type has already been stored in this
+                #  data block, then we should create a new block for it instead
+                if data_key in data_block.keys():
+                    # Reset block counter when transitioning from one session to
+                    #   the next. This ideally should not happen since data offload
+                    #   happens immediately after collection anyway but this is a
+                    #   good precaution in case of unexpected crashes.
+                    if (curr_session != prev_session):
+                        prev_session = curr_session
+                        blk_count = 0
 
-            # Extract the data type and value from the 'content' string
-            data_key = reading.content.split(":")[0].strip()
-            data_val = reading.content.split(":")[1].strip()
-            data_source_id = reading.source_id
+                    # Increase the block count for this session
+                    blk_count += 1
 
-            # Boolean indicator whether data key exists in a data block
-            key_exists = True
+                    # Save the block to the database
+                    db.add_data( session_id=reading.session_id,
+                                 dtype=reading.dtype,
+                                 source_id=reading.source_id,
+                                 content=str(data_block),
+                                 timestamp=reading.timestamp )
 
-            # Check if source id exists in current data blocks
-            if data_source_id in data_blocks.keys():
-                source_id_readings = data_blocks[data_source_id]
-                for i in range(len(source_id_readings)):
-                    if data_key in source_id_readings[i].keys():
-                        # Go to the next source id reading
-                        continue
+                    # Create a new blank data block
+                    data_block = {}
+                else:
+                    data_block[data_key] = data_val
 
-                    # If the data key is not existing on the source id readings
-                    key_exists = False
-                    data_blocks[data_source_id][i][data_key] = data_val
+            # If the last data block is non-empty, then offload its contents to the
+            #   archive as well
+            if len(data_block) > 0:
+                if (curr_session != prev_session):
+                    prev_session = curr_session
+                    blk_count = 0
 
-                    # Add block to offloaded_data if complete
-                    if len(data_blocks[data_source_id][i]) == n_params:
-                        if data_source_id not in offloaded_data.keys():
-                            offloaded_data[data_source_id] = [
-                                data_blocks[data_source_id][i]]
-                        else:
-                            offloaded_data[data_source_id].append(
-                                data_blocks[data_source_id][i])
-                        # Remove datum that has been offloaded
-                        del data_blocks[data_source_id][i]
-                    # Go to the next reading
-                    break
-                if key_exists is True:
-                    data_blocks[data_source_id].append({data_key: data_val})
-
-            # Initialize data block if source id not existing
-            else:
-                data_blocks[data_source_id] = [{data_key: data_val}]
-
-        # Add remaining data blocks to offload
-        for key, block in data_blocks.items():
-            for reading_set in block:
-                if len(reading_set) is not 0:
-                    if key not in offloaded_data.keys():
-                        offloaded_data[key] = [reading_set]
-                    else:
-                        offloaded_data[key].append(reading_set)
-
-        blk_count = 0
-        # Add offloaded data to database
-        for source, block in offloaded_data.items():
-            for reading_set in block:
-                # Save the block to the database
-                db.add_data(blk_id=blk_count,
-                            session_id=curr_session,
-                            source_id=source,
-                            content=str(reading_set),
-                            timestamp=reading.timestamp)
+                # Increase the block count for this session
                 blk_count += 1
+
+                # Save the block to the database
+                db.add_data( session_id=reading.session_id,
+                             source_id=reading.source_id,
+                             dtype=reading.dtype,
+                             content=str(data_block),
+                             timestamp=reading.timestamp )
 
         db.clear_session_data()
 

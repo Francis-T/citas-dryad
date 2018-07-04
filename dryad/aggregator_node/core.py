@@ -1,6 +1,6 @@
 #
 #   Aggregator Node Class
-#   Author: Francis T
+#   Author: Francis T and Jerelyn C
 #
 #   Class for all Aggregator Node functionality
 #

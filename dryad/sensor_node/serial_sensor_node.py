@@ -66,11 +66,9 @@ class SerialSensorNode(BaseSensorNode, metaclass=ABCMeta):
     def gather_data(self, on_error_flag=None, on_read_flag=None):
         reading = None
         try:
-            self.logger.debug("in gather_data")
             reading = self.ser.readline().decode("utf-8").strip()
             if reading.startswith('{') and reading.endswith('}'):
                 reading = eval(reading)
-                self.logger.debug(reading)
         except Exception as e:
             self.logger.error("Exception occured {}".format(str(e)))
 

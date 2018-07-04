@@ -47,9 +47,7 @@ class ReadThread(Thread):
             
             reading = ""
             next_part = ""
-            self.logger.debug("at run")
             while self.should_continue_read():
-                self.logger.debug("trying to read")
                 # Execute the read function defined by the parent node
                 reading = self.perform_read(on_error_flag=self.event_error, on_read_flag=self.event_read)
                 
@@ -102,10 +100,15 @@ class ReadThread(Thread):
     def cache_reading(self, reading):
         self.readings.append( reading )
 
-        # Store all other values
+        # Store source node and timestamp parameters
+        source_node = reading[PART_CONTENT]['SourceNode']
+        ts = reading[PART_HEADER]['Timestamp']
+        dtype = reading[PART_HEADER]['Type']
+
         db = DryadDatabase()
-        for key in reading[PART_HEADER].keys() + reading[PART_CONTENT].keys():
-            if key in ['Timestamp', 'SourceNode']:
+        # Go through all the keys
+        for key in list(reading[PART_HEADER].keys()) + list(reading[PART_CONTENT].keys()):
+            if key in ['Timestamp', 'SourceNode', 'Type']:
                 # Move on to the next iteration
                 continue
 
@@ -114,19 +117,19 @@ class ReadThread(Thread):
             if key in reading[PART_HEADER].keys():
                 part = PART_HEADER
 
-            result = db.add_session_data(reading[PART_CONTENT]['SourceNode'],
-                      str("{}: {}".format(key, reading[part][key])),
-                      reading[PART_HEADER]['Timestamp'] )
+            result = db.add_session_data(source_node, dtype,
+                      "{}:{}".format(key, reading[part][key]),
+                      ts)
 
             if result == False:
-                print("Failed to add data")
+                self.logger.error("Failed to add data")
 
         db.close_session()
 
         return
 
     def should_continue_read(self):
-        self.logger.debug("Read Status: {}, {}".format(ctime(self.read_time), self.readings_left))
+        self.logger.debug("Read status at {}: {} readings left".format(ctime(self.read_time), self.readings_left))
         # If the current time exceeds our read until value,
         #   then return False immediately to stop reading
         if (self.read_time > 0) and (time() > self.read_time):

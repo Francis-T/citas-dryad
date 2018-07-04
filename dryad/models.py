@@ -14,50 +14,7 @@ from sqlalchemy import Column, ForeignKey, event
 
 Base = declarative_base()
 
-# Validation functions
-
-
-def validate_int(value):
-    if isinstance(value, str):
-        try:
-            value = int(value)
-        except ValueError:
-            raise AttributeError("Value cant be assigned to integer")
-    else:
-        if not isinstance(value, int):
-            raise AttributeError("Value cant be assigned to integer")
-    return value
-
-
-def validate_string(value):
-    if not isinstance(value, str):
-        raise AttributeError("Value cant be assigned to string")
-    return value
-
-
-validators = {
-    Integer: validate_int,
-    String: validate_string,
-}
-
-
-# Validators when creating and inserting new objects
-@event.listens_for(Base, 'attribute_instrument')
-def configure_listener(class_, key, inst):
-    if not hasattr(inst.property, 'columns'):
-        return
-
-    # event called whenever a "set" occurs on that instrumented attribute
-    @event.listens_for(inst, "set", retval=True)
-    def set_(instance, value, oldvalue, initiator):
-        validator = validators.get(inst.property.columns[0].type.__class__)
-        if validator:
-            return validator(value)
-        else:
-            return value
-
 # Enums for the node classes and events
-
 
 class EnumWsnClass(enum.Enum):
     AGGREGATOR = "AGGREGATOR"
@@ -122,25 +79,21 @@ class Node(Base):
         lat={}, lon={}, power={}>".format(self.name, self.node_class, self.site_name,
                                 self.lat, self.lon, self.power)
 
-
 class NodeData(Base):
     __tablename__ = 't_node_data'
     id = Column(Integer, primary_key=True)
     session_id = Column(Integer, ForeignKey('t_sessions.id'))
+    dtype = Column(Integer)
     source_id = Column(String)
-    dest_id = Column(String)
-    part = Column(String)
-    length = Column(Integer)
     content = Column(String)
     timestamp = Column(Integer)
 
     session = relationship("Session")
 
     def __repr__(self):
-        return "<NodeData(id={}, session_id={}, source_id={}, dest_id={}, part={}, \
+        return "<NodeReading(id={}, session_id={}, source_id={}, dtype={},  \
         content={}, timestamp={}>".format(self.id, self.session_id, self.source_id,
-                                          self.dest_id, self.part, self.content,
-                                          self.timestamp)
+                                          self.dtype, self.content, self.timestamp)
 
 
 class SessionData(Base):
@@ -148,15 +101,17 @@ class SessionData(Base):
     id = Column(Integer, primary_key=True)
     session_id = Column(Integer, ForeignKey('t_sessions.id'))
     source_id = Column(String)
+    dtype = Column(Integer)
     content = Column(String)
     timestamp = Column(Integer)
 
     session = relationship("Session")
 
     def __repr__(self):
-        return "<SessionData(id={}, session_id={}, source_id={}, content={}, \
-        timestamp={}>".format(self.id, self.session_id, self.source_id,
-                              self.content, self.timestamp)
+        return "<SessionData(id={}, session_id={}, source_id={}, type={} \
+                content={}, timestamp={}>".format(self.id, self.session_id, 
+                                                  self.source_id, self.dtype,
+                                                  self.content, self.timestamp)
 
 
 class NodeEvent(Base):
