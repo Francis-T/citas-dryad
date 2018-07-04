@@ -57,11 +57,11 @@
 #define ID_REL_NODE       90
 
 // Sensor pins
-#define PIN_SOIL_TEMP     6
-#define PIN_HUM_AIR_TEMP  9
-#define PIN_PH            A0
-#define PIN_LIGHT         A3
-#define PIN_MOISTURE      A2
+#define PIN_SOIL_TEMP     A1
+#define PIN_HUM_AIR_TEMP  11
+#define PIN_PH            A3
+#define PIN_LIGHT         A2
+#define PIN_MOISTURE      A0
 
 // Sensor value offsets
 #define OFFSET_PH         1.00 // To be calibrated

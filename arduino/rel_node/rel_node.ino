@@ -254,29 +254,23 @@ void setup() {
 
   // Start Serial
   Serial.begin(115200);
-
   // Assign LED pin mode to Output
   pinMode(LED, OUTPUT);
   
   // Initialize RTC 
   rtc_init();
-  
   // Setup Radio
   pinMode(RFM69_RST, OUTPUT);
   digitalWrite(RFM69_RST, LOW);
-
   // Setup LoRa 
   pinMode(RFM95_RST, OUTPUT);
   digitalWrite(RFM95_RST, HIGH);
-
   // Call initialization for radio and lora
   radio_init();
   lora_init();
-
   // Display addresses
   DBG_PRINT("Self address @"); DBG_PRINTLN(MY_ADDRESS);
   DBG_PRINT("Dest address @"); DBG_PRINTLN(DEST_ADDRESS);
-  
   return;
 }
 
