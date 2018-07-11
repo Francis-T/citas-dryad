@@ -62,7 +62,6 @@ class Session(Base):
         return "<Session(id={}, start_time={}, \
         end_time={}>".format(self.id, self.start_time, self.end_time)
 
-
 class Node(Base):
     __tablename__ = 't_nodes'
     # id = Column(Integer, primary_key=True)
@@ -75,9 +74,9 @@ class Node(Base):
     power = Column(Float)
 
     def __repr__(self):
-        return "<Node(name={}, node_class={}, site_name={}, \
-        lat={}, lon={}, power={}>".format(self.name, self.node_class, self.site_name,
-                                self.lat, self.lon, self.power)
+        return "<Node(name={}, address={}, node_class={}, site_name={}, \
+        lat={}, lon={}, power={}>".format(self.name, self.address, self.node_class,
+                                self.site_name, self.lat, self.lon, self.power)
 
 class NodeData(Base):
     __tablename__ = 't_node_data'

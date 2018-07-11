@@ -42,7 +42,7 @@ NODE_STATE_STR = [
     "SAVING"
 ]
 
-VERSION = "2.0.1"
+VERSION = "3.0.0"
 COLLECTION_INTERVAL = 60.0 * 60.0
 IDLE_OUT_INTERVAL   = 60.0 * 20.0
 NET_UPDATE_INTERVAL  = 60.0 * 60.0 * 24.0
@@ -70,6 +70,16 @@ class AggregatorThread(Thread):
             self.event_complete.set()
 
         return
+
+#class TimerThread(threading.Thread):
+#    def __init__(self, func):
+#        threading.Thread.__init__(self)
+#        self.event = threading.Event()
+#        self.func = func
+#
+#    def run(self):
+#        
+#        return True 
 
 class AggregatorNode(BaseAggregatorNodeNetwork):
     def __init__(self):

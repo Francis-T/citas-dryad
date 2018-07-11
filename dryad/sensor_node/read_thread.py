@@ -5,6 +5,7 @@
 
 import time
 import logging
+import utils.transform as transform
 
 from time import time, sleep, ctime
 from threading import Thread
@@ -38,6 +39,8 @@ class ReadThread(Thread):
         self.read_interval = read_interval
 
         self.readings_left = self.read_samples
+
+        self.tr = transform.DataTransformation() 
 
         return
 
@@ -116,6 +119,18 @@ class ReadThread(Thread):
             part = PART_CONTENT
             if key in reading[PART_HEADER].keys():
                 part = PART_HEADER
+            
+            # Check and transform sensor readings
+            if key == 'Conductivity':
+                reading[part][key] = self.tr.conv_ec(reading[part][key])
+            elif key == 'AirTemp' or key == 'SoilTemp':
+                reading[part][key] = self.tr.conv_temp(reading[part][key])
+            elif key == 'Light':
+                reading[part][key] = self.tr.conv_light(reading[part][key])
+            elif key == 'Moisture':
+                reading[part][key] = self.tr.conv_moisture(reading[part][key])
+            elif key == 'Humidity':
+                reading[part][key] = self.tr.conv_humidity(reading[part][key])
 
             result = db.add_session_data(source_node, dtype,
                       "{}:{}".format(key, reading[part][key]),
