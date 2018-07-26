@@ -95,3 +95,5 @@ ENV/
 # Random swap files
 *.sw*
 
+# setup files
+setup/blue*

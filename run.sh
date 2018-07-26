@@ -13,7 +13,7 @@ EXIT_POWEROFF=4
 echo -n "Waiting for system to start up...";
 if [ "$1" != "-q" ];
 then
-    for i in {0..20};
+    for i in {0..10};
     do
         sleep 1;
         echo -n .;
@@ -54,7 +54,6 @@ sudo hwclock -r
 
 # Set the HCI Config to PSCAN so that other devices can connect to it
 echo "Configuring Bluetooth adapter..."  >> $CACHE_NODE_SCRIPT_LOG;
-sudo /bin/hciconfig hci1 down
 sudo /bin/hciconfig hci0 down
 sudo /bin/hciconfig hci0 up
 sudo /bin/hciconfig hci0 piscan
@@ -97,14 +96,13 @@ do
     break;
 
 done;
-
-if [ $RES_CODE -eq $EXIT_REBOOT ];
-then
-    echo "Rebooting now"  >> $CACHE_NODE_SCRIPT_LOG;
-    sudo reboot
-elif [ $RES_CODE -eq $EXIT_POWEROFF ];
-then
-    echo "Shutting down now" >> $CACHE_NODE_SCRIPT_LOG;
-    sudo shutdown -h now
-fi;
-
+#
+#if [ $RES_CODE -eq $EXIT_REBOOT ];
+#then
+#    echo "Rebooting now"  >> $CACHE_NODE_SCRIPT_LOG;
+#    sudo reboot
+#elif [ $RES_CODE -eq $EXIT_POWEROFF ];
+#then
+#    echo "Shutting down now" >> $CACHE_NODE_SCRIPT_LOG;
+#    sudo shutdown -h now
+#fi;

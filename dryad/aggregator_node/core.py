@@ -1,6 +1,6 @@
 #
 #   Aggregator Node Class
-#   Author: Francis T
+#   Author: Francis T and Jerelyn C
 #
 #   Class for all Aggregator Node functionality
 #
@@ -42,7 +42,7 @@ NODE_STATE_STR = [
     "SAVING"
 ]
 
-VERSION = "2.0.1"
+VERSION = "3.0.0"
 COLLECTION_INTERVAL = 60.0 * 60.0
 IDLE_OUT_INTERVAL   = 60.0 * 20.0
 NET_UPDATE_INTERVAL  = 60.0 * 60.0 * 24.0
@@ -70,6 +70,16 @@ class AggregatorThread(Thread):
             self.event_complete.set()
 
         return
+
+#class TimerThread(threading.Thread):
+#    def __init__(self, func):
+#        threading.Thread.__init__(self)
+#        self.event = threading.Event()
+#        self.func = func
+#
+#    def run(self):
+#        
+#        return True 
 
 class AggregatorNode(BaseAggregatorNodeNetwork):
     def __init__(self):
@@ -139,9 +149,9 @@ class AggregatorNode(BaseAggregatorNodeNetwork):
         if self.set_idle_out_timer() != RESULT_OK:
             self.logger.error("Failed to set idle out timer")
 
-        # if self.deployment_status == STATUS_DEPLOYED:
-        #     # TODO Needs refactoring
-        #     self.add_task("ACTIVATE")
+        #if self.deployment_status == STATUS_DEPLOYED:
+        #    # TODO Needs refactoring
+        #    self.add_task("ACTIVATE")
         
         ext_sw = ExternalSwitch()
         if (ext_sw.is_node_activated()):

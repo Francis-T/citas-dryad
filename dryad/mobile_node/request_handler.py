@@ -28,6 +28,7 @@ SYS_CMD_UPTIME = 'uptime | cut -d"," -f1'
 class RequestHandler():
     def __init__(self, node):
         self.request_handler_tbl = [
+            {"req_hdr": "QNOOP", "function": self.handle_req_noop},
             {"req_hdr": "QSTAT", "function": self.handle_req_state},
             {"req_hdr": "QTSET", "function": self.handle_req_dtime_set},
             {"req_hdr": "QACTV", "function": self.handle_req_activate},
@@ -55,6 +56,10 @@ class RequestHandler():
 
         return
 
+    def handle_req_noop(self, link, content):
+        # Request noop for mobile application
+        return link.send_response("RNOOP:;\r\n")
+
     def handle_req_state(self, link, content):
         # Retrive details about the cache node from the database
         db = DryadDatabase()
@@ -64,7 +69,7 @@ class RequestHandler():
         if len(node_matches) <= 0:
             self.logger.error("Failed to load data for 'SELF'")
 
-            return link.send_response("RSTAT:FAIL\r\n")
+            return link.send_response("RSTAT:FAIL;\r\n")
 
         db.close_session()
 
@@ -187,6 +192,7 @@ class RequestHandler():
     def handle_req_update_cache(self, link, content):
         params = {
             "name":   None,
+            "address": None,
             "lat":   None,
             "lon":   None,
             "site_name":   None
@@ -220,6 +226,7 @@ class RequestHandler():
 
         # Update cache node details in the DB
         result = db.insert_or_update_node(name=node_data.name,
+                                          address=node_data.address,
                                           node_class=node_data.node_class,
                                           site_name=params['site_name'],
                                           lat=params['lat'],
@@ -278,12 +285,11 @@ class RequestHandler():
     def handle_req_setup_sensor(self, link, content):
         params = {
             "name": None,
+            "address": None,
+            "node_class": None,
             "site_name": None,
-            "address": None
-            "state": None,
             "lat": None,
             "lon": None,
-            "updated": None,
         }
 
         # remove trailing ";"
@@ -304,8 +310,8 @@ class RequestHandler():
         db = DryadDatabase()
 
         result = db.insert_or_update_node(name=params['name'],
+                                          node_class=params['node_class'],
                                           address=params['address'],
-                                          node_class=CLASS_SENSOR,
                                           site_name=params['site_name'],
                                           lat=params['lat'],
                                           lon=params['lon'])
@@ -323,7 +329,6 @@ class RequestHandler():
             "address": None,
             "node_class": None,
             "site_name": None,
-            "power": None,
             "lat": None,
             "lon": None,
         }
@@ -350,7 +355,6 @@ class RequestHandler():
                                           address=params['address'],
                                           node_class=params['node_class'],
                                           site_name=params['site_name'],
-                                          power=params['power'],
                                           lat=params['lat'],
                                           lon=params['lon'])
         if result == False:
@@ -432,7 +436,7 @@ class RequestHandler():
         return link.send_response("RSETP:OK;\r\n")
 
     def handle_req_download(self, link, content):
-
+        dtype = 2
         limit = None
         offset = None
         start_id = 0
@@ -451,12 +455,16 @@ class RequestHandler():
                 elif arg.lower().startswith("end_id="):
                     end_id = int(arg.split('=')[1])
 
-                elif arg.lower().startswith("offset="):
+                if arg.lower().startswith("offset="):
                     offset = int(arg.split('=')[1])
+
+                if arg.lower().startswith("dtype="):
+                    dtype = int(arg.split('=')[1])
 
         db = DryadDatabase()
         ## TODO Filter data either status or sensor readings
-        matched_data = db.get_data(limit=limit,
+        matched_data = db.get_data(dtype=dtype,
+                                   limit=limit,
                                    offset=offset,
                                    start_id=start_id,
                                    end_id=end_id)

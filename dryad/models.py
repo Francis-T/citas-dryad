@@ -14,50 +14,7 @@ from sqlalchemy import Column, ForeignKey, event
 
 Base = declarative_base()
 
-# Validation functions
-
-
-def validate_int(value):
-    if isinstance(value, str):
-        try:
-            value = int(value)
-        except ValueError:
-            raise AttributeError("Value cant be assigned to integer")
-    else:
-        if not isinstance(value, int):
-            raise AttributeError("Value cant be assigned to integer")
-    return value
-
-
-def validate_string(value):
-    if not isinstance(value, str):
-        raise AttributeError("Value cant be assigned to string")
-    return value
-
-
-validators = {
-    Integer: validate_int,
-    String: validate_string,
-}
-
-
-# Validators when creating and inserting new objects
-@event.listens_for(Base, 'attribute_instrument')
-def configure_listener(class_, key, inst):
-    if not hasattr(inst.property, 'columns'):
-        return
-
-    # event called whenever a "set" occurs on that instrumented attribute
-    @event.listens_for(inst, "set", retval=True)
-    def set_(instance, value, oldvalue, initiator):
-        validator = validators.get(inst.property.columns[0].type.__class__)
-        if validator:
-            return validator(value)
-        else:
-            return value
-
 # Enums for the node classes and events
-
 
 class EnumWsnClass(enum.Enum):
     AGGREGATOR = "AGGREGATOR"
@@ -105,7 +62,6 @@ class Session(Base):
         return "<Session(id={}, start_time={}, \
         end_time={}>".format(self.id, self.start_time, self.end_time)
 
-
 class Node(Base):
     __tablename__ = 't_nodes'
     # id = Column(Integer, primary_key=True)
@@ -118,35 +74,15 @@ class Node(Base):
     power = Column(Float)
 
     def __repr__(self):
-        return "<Node(name={}, node_class={}, site_name={}, \
-        lat={}, lon={}>".format(self.name, self.node_class, self.site_name,
-                                self.lat, self.lon)
-
+        return "<Node(name={}, address={}, node_class={}, site_name={}, \
+        lat={}, lon={}, power={}>".format(self.name, self.address, self.node_class,
+                                self.site_name, self.lat, self.lon, self.power)
 
 class NodeData(Base):
     __tablename__ = 't_node_data'
     id = Column(Integer, primary_key=True)
     session_id = Column(Integer, ForeignKey('t_sessions.id'))
-    source_id = Column(Integer, ForeignKey('t_nodes.address'))
-    dest_id = Column(Integer, ForeignKey('t_nodes.address'))
-    part = Column(String)
-    length = Column(Integer)
-    content = Column(String)
-    timestamp = Column(Integer)
-
-    session = relationship("Session")
-    node = relationship("Node")
-
-    def __repr__(self):
-        return "<NodeData(id={}, session_id={}, source_id={}, part={}, \
-        content={}, timestamp={}>".format(self.id, self.session_id, self.source_id,
-                                          self.part, self.content, self.timestamp)
-
-
-class SessionData(Base):
-    __tablename__ = 't_session_data'
-    id = Column(Integer, primary_key=True)
-    session_id = Column(Integer, ForeignKey('t_sessions.id'))
+    dtype = Column(Integer)
     source_id = Column(String)
     content = Column(String)
     timestamp = Column(Integer)
@@ -154,9 +90,27 @@ class SessionData(Base):
     session = relationship("Session")
 
     def __repr__(self):
-        return "<SessionData(id={}, session_id={}, source_id={}, content={}, \
-        timestamp={}>".format(self.id, self.session_id, self.source_id,
-                              self.content, self.timestamp)
+        return "<NodeReading(id={}, session_id={}, source_id={}, dtype={},  \
+        content={}, timestamp={}>".format(self.id, self.session_id, self.source_id,
+                                          self.dtype, self.content, self.timestamp)
+
+
+class SessionData(Base):
+    __tablename__ = 't_session_data'
+    id = Column(Integer, primary_key=True)
+    session_id = Column(Integer, ForeignKey('t_sessions.id'))
+    source_id = Column(String)
+    dtype = Column(Integer)
+    content = Column(String)
+    timestamp = Column(Integer)
+
+    session = relationship("Session")
+
+    def __repr__(self):
+        return "<SessionData(id={}, session_id={}, source_id={}, type={} \
+                content={}, timestamp={}>".format(self.id, self.session_id, 
+                                                  self.source_id, self.dtype,
+                                                  self.content, self.timestamp)
 
 
 class NodeEvent(Base):

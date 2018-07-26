@@ -1,19 +1,21 @@
 # updating & upgrading aptitude repositories
 echo "Updating repositories"
-sudo apt-get update && sudo apt-get -y upgrade
+sudo apt-get -y update && sudo apt-get -y upgrade
 
 # retrieving and installing bluez
 echo "Retrieving and installation of bluez"
-wget http://www.kernel.org/pub/linux/bluetooth/bluez-5.41.tar.xz
-tar xvf bluez-5.41.tar.xz
+wget http://www.kernel.org/pub/linux/bluetooth/bluez-5.49.tar.xz
+tar xvf bluez-5.49.tar.xz
 
-cd bluez-5.41
+cd bluez-5.49
 sudo apt-get install -y libusb-dev libdbus-1-dev libglib2.0-dev libudev-dev libical-dev libreadline-dev
 ./configure
 
 make
 sudo make install
 cd ..
+
+rm -r bluez*
 
 # Enabling bluez service to automatically start upon system boot
 echo "Enabling bluetooth service"
@@ -36,11 +38,6 @@ sudo apt-get -y install python-dev pkg-config libboost-python-dev libboost-threa
 echo "Installing sqlite3"
 sudo apt-get install sqlite3
 
-#creation and activation of virtual environment with default python interpreter of python3.4
-sudo pip install virtualenv
-virtualenv -p /usr/bin/python3.4 venv
-. venv/bin/activate
-
 # installation of required python modules
 echo "Installing required python modules"
 sudo pip3 install -r requirements.txt
@@ -51,3 +48,10 @@ sudo pip3 install bluepy
 echo "Installing vim editor and setting up vimrc"
 sudo apt-get -y install vim
 cat vimrc_setup.txt > ~/.vimrc
+
+# installation of tmux
+echo "Installing tmux"
+sudo apt-get -y install tmux
+
+# installation of access points dependencies
+sudo apt-get -y install dnsmasq hostapd

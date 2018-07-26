@@ -1,21 +1,25 @@
+#   Read Thread
+#   Author: Jerelyn C
 #
-#   Read Thread Base Class
-#   Author: Francis T
-#
-#   Base class for handling read operations from BLE Sensor Nodes
-#
+#   Serial communication between the microcontroller and AGN
 
+import time
 import logging
+import utils.transform as transform
 
 from time import time, sleep, ctime
 from threading import Thread
 
 from dryad.database import DryadDatabase
 
-class ReadThread(Thread): #, metaclass=ABCMeta):
-    def __init__(self, func_read, readings, logger=None, event_done=None, event_read=None, \
+PART_HEADER = 'Header'
+PART_CONTENT = 'Content'
+
+class ReadThread(Thread): 
+    def __init__(self, parent, func_read, readings, logger=None, event_done=None, event_read=None, \
                  event_error=None, read_samples=0, read_time=0, read_interval=0):
         Thread.__init__(self)
+        self.parent = parent
 
         if logger == None:
             self.logger = logging.getLogger("main.read_thread")
@@ -36,30 +40,16 @@ class ReadThread(Thread): #, metaclass=ABCMeta):
 
         self.readings_left = self.read_samples
 
+        self.tr = transform.DataTransformation() 
+
         return
 
     def run(self):
-        if self.parent == None:
-            self.logger.error("No parent device".format())
-            self.notify_error()
-            self.notify_done()
-            return False
-        
-        # Attempt to connect the parent device if it has not been connected yet
-        if self.parent.is_connected == False:
-            res = self.parent.connect()
-            if (res == False):
-                self.logger.error("[{}] Cannot read from unconnected device".format(self.parent.get_name()))
-                self.notify_error()
-                self.notify_done()
-                return False
-
-        # Setup the 'connection'
-        self.parent.setup_connection()
-
         try:
             self.read_time = time() + self.read_time
-
+            
+            reading = ""
+            next_part = ""
             while self.should_continue_read():
                 # Execute the read function defined by the parent node
                 reading = self.perform_read(on_error_flag=self.event_error, on_read_flag=self.event_read)
@@ -113,31 +103,48 @@ class ReadThread(Thread): #, metaclass=ABCMeta):
     def cache_reading(self, reading):
         self.readings.append( reading )
 
-        # Store the timestamp parameter
-        ts = reading['ts']
+        # Store source node and timestamp parameters
+        source_node = reading[PART_CONTENT]['SourceNode']
+        ts = reading[PART_HEADER]['Timestamp']
+        dtype = reading[PART_HEADER]['Type']
 
-        # Store all other values
         db = DryadDatabase()
-        for key in reading:
-            if key == 'ts':
+        # Go through all the keys
+        for key in list(reading[PART_HEADER].keys()) + list(reading[PART_CONTENT].keys()):
+            if key in ['Timestamp', 'SourceNode', 'Type']:
+                # Move on to the next iteration
                 continue
 
-            result = db.add_session_data( self.parent.get_name(),
-                                  str("{}: {}".format(key, reading[key])),
-                                  ts )
+            # Identify whether part is content or header
+            part = PART_CONTENT
+            if key in reading[PART_HEADER].keys():
+                part = PART_HEADER
+            
+            # Check and transform sensor readings
+            if key == 'Conductivity':
+                reading[part][key] = self.tr.conv_ec(reading[part][key])
+            elif key == 'AirTemp' or key == 'SoilTemp':
+                reading[part][key] = self.tr.conv_temp(reading[part][key])
+            elif key == 'Light':
+                reading[part][key] = self.tr.conv_light(reading[part][key])
+            elif key == 'Moisture':
+                reading[part][key] = self.tr.conv_moisture(reading[part][key])
+            elif key == 'Humidity':
+                reading[part][key] = self.tr.conv_humidity(reading[part][key])
+
+            result = db.add_session_data(source_node, dtype,
+                      "{}:{}".format(key, reading[part][key]),
+                      ts)
+
             if result == False:
-                print("Failed to add data")
+                self.logger.error("Failed to add data")
 
         db.close_session()
 
         return
 
     def should_continue_read(self):
-        self.logger.debug("Read Status: {}, {}, {}".format(self.parent.is_connected, ctime(self.read_time), self.readings_left))
-        # If we're no longer connected, then stop reading
-        if self.parent.is_connected == False:
-            return False
-
+        self.logger.debug("Read status at {}: {} readings left".format(ctime(self.read_time), self.readings_left))
         # If the current time exceeds our read until value,
         #   then return False immediately to stop reading
         if (self.read_time > 0) and (time() > self.read_time):
@@ -156,6 +163,3 @@ class ReadThread(Thread): #, metaclass=ABCMeta):
 
     def get_readings(self):
         return self.readings
-
-
-

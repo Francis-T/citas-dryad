@@ -55,7 +55,7 @@ class BaseAggregatorNodeNetwork():
         # Get all nodes
         node_records = db.get_nodes()
 
-        if (node_records == False) or (device_records == False):
+        if node_records == False:
             db.close_session()
             return
 
@@ -80,5 +80,3 @@ class BaseAggregatorNodeNetwork():
 
     def get_node_list(self):
         return self.node_list
-
-
