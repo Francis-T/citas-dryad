@@ -57,7 +57,7 @@
 #define ID_REL_NODE       90
 
 // Sensor pins
-#define PIN_SOIL_TEMP     A1
+#define PIN_SOIL_TEMP     12
 #define PIN_HUM_AIR_TEMP  11
 #define PIN_PH            A3
 #define PIN_LIGHT         A2
@@ -98,9 +98,9 @@
 #define STATUS_CONTINUE   2
 
 // Duration and Timeout in Milliseconds
-#define IDLE_TIMEOUT        15000
+#define IDLE_TIMEOUT        5000
 #define TRANSMIT_TIMEOUT    1000
-#define COL_TX_DURATION     80000
+#define COL_TX_DURATION     500000
 #define SLEEP_TIME          5000
 
 /** Note: SLEEP_TIME_SECS is separated here because
@@ -229,6 +229,13 @@ OneWire soilTempWire(PIN_SOIL_TEMP);
 DallasTemperature _soilTemp(&soilTempWire);
 MovingAverage _ma (0.01);
 DHT _humAirTemp (PIN_HUM_AIR_TEMP, DHT22);
+
+// Moisture mapping constants
+int _dryValue = 800; // replace with actual reading
+int _wetValue = 640; // replace with actual reading
+int _idealDryValue = 0;
+int _idealWetValue = 100;
+
 
 eState_t _prevState = STATE_INACTIVE;
 eState_t _state = STATE_INACTIVE;
@@ -448,17 +455,19 @@ int proc_hdlCollect() {
   // Updating Moving Average
   _ma.update(analogRead(PIN_MOISTURE));
 
+  // Getting soil temperature
+  _soilTemp.requestTemperatures();
+
   /* Create the data payload */
   _tDataPayload.uNodeId        = ID_SEN_NODE;
   _tDataPayload.uRelayId       = ID_REL_NODE;
   _tDataPayload.uPH            = analogRead(PIN_PH);
   _tDataPayload.uConductivity  = 0x03FF;
   _tDataPayload.uLight         = analogRead(PIN_LIGHT);
-  _tDataPayload.uTempAir       = _humAirTemp.readTemperature();
-  _tDataPayload.uTempSoil      = digitalRead(PIN_SOIL_TEMP);
+  _tDataPayload.uTempAir       = _humAirTemp.readTemperature(true);
+  _tDataPayload.uTempSoil      = _soilTemp.getTempCByIndex(0);
   _tDataPayload.uHumidity      = _humAirTemp.readHumidity();
-//    _tDataPayload.uMoisture      = _ma.get();
-  _tDataPayload.uMoisture      = analogRead(PIN_MOISTURE);
+  _tDataPayload.uMoisture      = map(_ma.get(), _dryValue, _wetValue, _idealDryValue, _idealWetValue);
   _tDataPayload.uReserved      = 0x03FF;
 
   /* Write data payload to the packet */

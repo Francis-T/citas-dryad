@@ -85,10 +85,10 @@
 #define STATUS_CONTINUE   2
 
 // Duration and Timeout in Milliseconds
-#define IDLE_TIMEOUT      10000
+#define IDLE_TIMEOUT      5000
 #define LISTEN_TIMEOUT    5000
 #define TRANSMIT_TIMEOUT  5000
-#define LIS_TX_DURATION   80000
+#define LIS_TX_DURATION   500000
 #define SLEEP_TIME        5000 // 20s
 
 /** Note: SLEEP_TIME_SECS is separated here because
@@ -251,7 +251,7 @@ tDataPayload_t _tDataPayload;
  */
 void setup() {
 //  while (!Serial) { delay(1); }
-
+  Serial.println("1");
   // Start Serial
   Serial.begin(115200);
   // Assign LED pin mode to Output
@@ -259,15 +259,18 @@ void setup() {
   
   // Initialize RTC 
   rtc_init();
+  Serial.println("2");
   // Setup Radio
   pinMode(RFM69_RST, OUTPUT);
   digitalWrite(RFM69_RST, LOW);
   // Setup LoRa 
+  Serial.println("3");
   pinMode(RFM95_RST, OUTPUT);
   digitalWrite(RFM95_RST, HIGH);
   // Call initialization for radio and lora
   radio_init();
   lora_init();
+  Serial.println("4");
   // Display addresses
   DBG_PRINT("Self address @"); DBG_PRINTLN(MY_ADDRESS);
   DBG_PRINT("Dest address @"); DBG_PRINTLN(DEST_ADDRESS);
@@ -612,14 +615,16 @@ eState_t state_get() {
 */
 void rtc_init() {
     /* Start the built-in RTC */
+  Serial.println("RTC INIT");
   _rtc.begin();
   _radioRtc.begin(); // Start the RTC in 24hr mode
-
+  Serial.println("Begin");
   if (_rtc.lostPower()) {
     DBG_PRINTLN("RTC lost power, lets set the time!");
     // following line sets the RTC to the date & time this sketch was compiled
     _rtc.adjust(DateTime(F(__DATE__), F(__TIME__)));
   }
+  Serial.println("Hello");
 }
 
 /******************************/
